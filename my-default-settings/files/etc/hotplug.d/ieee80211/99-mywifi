@@ -1,0 +1,4 @@
+#!/bin/sh
+
+[ "${ACTION}" = "add" ] || exit 0
+[ -z "$(uci -q get base_config.@status[0].wifi)" ] && . /sbin/mywifi &
