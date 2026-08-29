@@ -7,27 +7,17 @@
 'require fs-router as router';
 'require fs-prefs as prefs';
 'require fs-sheets as sheets';
-'require fs-search as search';
 
-/* PAGE MODULES: TWO OF THESE MODULES ARE FOR ONE PAGE EACH, AND USED TO SHIP WITH EVERY PAGE.
+/* Page modules: `fs-appearance` (System -> System) and `fs-overview` (Status -> Overview) each
+ * serve one page and are required only on it. A `require` pragma would make them a hard
+ * dependency — luci.js fetches and evaluates before this factory runs — costing 11.5 KB and 3.8 KB
+ * after terser on every admin page that has neither.
  *
- * `fs-appearance` draws the Appearance controls on System -> System and `fs-overview` reshapes
- * Status -> Overview; each watches `body[data-page]` and does nothing anywhere else, which is the
- * right design — a theme may not register a dispatcher node, so it cannot own a route. But they
- * were `require`d in the directive prologue, and a pragma is a hard dependency: luci.js fetches and
- * evaluates them before this file's factory runs, on EVERY admin page. Measured after terser: 11.5
- * KB for the Appearance panel and 3.8 KB for the Overview one, on every cold visit to a page that
- * has neither.
+ * Each module keeps its own `body[data-page]` observer; `wire()` re-checks the page
+ * synchronously, so a module arriving after the stamp still starts watching.
  *
- * So the pragma is replaced by the same observation they were doing for themselves, once, here: on
- * the page they belong to — and only there — the module is required and wired. What each of them
- * then does is unchanged, including its own observer: `wire()` re-checks the page synchronously, so
- * a module that arrives after the stamp still starts watching. The dependency EDGE is what moved,
- * not the behaviour.
- *
- * The map duplicates a page name that also lives inside each module, and `npm run page-modules`
- * derives both sides and fails if they drift — the same trade as the Appearance axes, which are
- * implemented twice on purpose and held by a gate. */
+ * The map duplicates a page name that also lives inside each module; `npm run page-modules`
+ * derives both sides and fails on drift. */
 const PAGE_MODULES = {
 	'admin-system-system': 'fs-appearance',
 	'admin-status-overview': 'fs-overview'
@@ -40,8 +30,8 @@ function wirePageModules() {
 		const name = PAGE_MODULES[document.body.getAttribute('data-page') || ''];
 		if (!name || _pageModules.has(name)) return;
 		_pageModules.set(name, RT.require(name).then((m) => m.wire()).catch((e) => {
-			/* a page module that will not load costs its own page's extras and nothing else, so it
-			 * is dropped from the map and retried the next time that page comes up */
+			/* a failed page module costs only its own page's extras: drop it and retry the next
+			 * time that page comes up */
 			_pageModules.delete(name);
 			console.error('footstrap: ' + name + ' did not load', e);
 		}));
@@ -51,31 +41,107 @@ function wirePageModules() {
 	load();
 }
 
-/* THE THREE TEMPLATE GLOBALS STATUS→OVERVIEW NEEDS, DEFINED WHERE ORDER IS GUARANTEED.
+/* ---- the search palette, held at arm's length ----
+ *
+ * The palette is 5 KB and opens on a keystroke most sessions never press, so it is not required
+ * here: this holds the shortcut and fetches the module on the first gesture. What CANNOT wait is
+ * the recents list — it has to be written on every navigation, or it is empty on the first open —
+ * and the warm pass that uses it, so both live here, in the file every page already loads.
+ *
+ * The palette reads the list back from localStorage when it opens, so the two halves share the key
+ * and nothing else. */
+const RECENT_KEY = 'fs-recent';
+const RECENT_MAX = 8;
+const RECENT_WARM = 5;
+
+function remember(segs) {
+	if (!Array.isArray(segs) || !segs.length) return;
+	const path = segs.join('/');
+	const recent = prefs.lsGetArr(RECENT_KEY).filter((x) => typeof x === 'string');
+	prefs.lsSet(RECENT_KEY, JSON.stringify([ path ].concat(recent.filter((p) => p !== path)).slice(0, RECENT_MAX)));
+}
+
+/* ---- warm the pages this admin actually uses ----
+ *
+ * The router's per-link prefetch needs a hover, tap or focus first, so a session's first visit to a
+ * page still pays for its module chain. The recents list is the best predictor available and is
+ * already on disk; warming the whole menu instead would pull every view module on the box
+ * (docs/spa-router.md).
+ *
+ * The current page is skipped — remember() has just recorded it and it is loaded by definition.
+ * Under saveData nothing speculative runs; the per-link prefetch stays, since it follows a
+ * deliberate hover or tap. Nothing waits on this, so it runs at idle, with a long fallback delay:
+ * it competes with the view's own module fetches and RPCs and must lose that race. */
+function warmRecent() {
+	try { if (navigator.connection && navigator.connection.saveData) return; } catch (e) {}
+	const here = (L.env.dispatchpath || []).join('/');
+	const paths = prefs.lsGetArr(RECENT_KEY)
+		.filter((p) => typeof p === 'string' && p !== here).slice(0, RECENT_WARM);
+	if (!paths.length) return;
+	const go = () => paths.forEach((p) => router.prefetchSegs(p.split('/')));
+	if (typeof window.requestIdleCallback === 'function')
+		window.requestIdleCallback(go, { timeout: 4000 });
+	else
+		window.setTimeout(go, 2000);
+}
+
+function wireSearch() {
+	const btn = document.getElementById('fs-search-btn');
+	if (!btn) return;
+	const RT = window.L;
+
+	/* the page this full load landed on; onNavigate covers the SPA path afterwards */
+	remember(L.env.dispatchpath || []);
+	router.onNavigate(remember);
+	warmRecent();
+
+	/* One fetch, on the first gesture. The module builds its overlay and opens itself; every later
+	 * gesture reaches the same instance, `require` being a singleton. */
+	let pending = false;
+	const open = () => {
+		if (pending) return;
+		pending = true;
+		RT.require('fs-search').then((m) => { pending = false; m.open(); },
+			(e) => { pending = false; console.error('footstrap: fs-search did not load', e); });
+	};
+
+	btn.addEventListener('click', open);
+	/* the same two shortcuts the palette used to own, with the same guard: `/` must not steal a
+	 * keystroke from someone typing into a field, a contenteditable, or a .cbi-dropdown, where
+	 * fs-select.js's typeahead reads it as a search character */
+	document.addEventListener('keydown', (ev) => {
+		if (ev.defaultPrevented) return;
+		if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && (ev.key === 'k' || ev.key === 'K')) {
+			ev.preventDefault(); open(); return;
+		}
+		if (ev.key !== '/' || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+		if (ev.target.closest?.('input, textarea, select, [contenteditable], .cbi-dropdown')) return;
+		ev.preventDefault(); open();
+	});
+}
+
+/* The three template globals Status -> Overview needs, defined where ordering is guaranteed.
  *
  * `admin_status/index.ut` defines `progressbar`, `renderBox` and `renderBadge` in an inline script
- * and then instantiates `view.status.index`; the stock includes (18_cpu, 30_network, 60_wifi…) call
- * them bare from their own `render()`. An SPA arrival never runs that inline script, so this theme
- * is their only definition — and a definition that arrives late is a `ReferenceError` thrown from a
- * stock include on a page already committed to the document.
+ * the stock includes (18_cpu, 30_network, 60_wifi…) call bare from their own `render()`. An SPA
+ * arrival never runs that script, so the theme is their only definition — and a late definition is
+ * a `ReferenceError` from a stock include on a page already committed to the document.
  *
- * THEY LIVE HERE RATHER THAN IN `fs-overview.js` FOR EXACTLY ONE REASON: ordering. While that module
- * was in the directive prologue it evaluated at chrome init, i.e. before any navigation could
- * happen, and the guarantee was free. It is a page module now (PAGE_MODULES above) — required
- * DURING the navigation that needs it, in a chain that races the router's own require of the view
- * class. fs-overview's chain is the shorter of the two and should win, but nothing orders them, and
- * losing costs the page. This file is required by the footer on every page and evaluates before the
- * router exists, so moving the ~40 dependency-free lines here restores the guarantee at a cost of
- * their own bytes; the 3.8 KB of Overview layout code stays on the Overview.
+ * They live here rather than in `fs-overview.js` because a page module is required DURING the
+ * navigation that needs it, racing the router's own require of the view class with nothing
+ * ordering the two. This file is required by the footer on every page and evaluates before the
+ * router exists.
  *
- * Bodies are verbatim from upstream except L.itemlist → window.L.itemlist (the two-L trap,
- * docs/spa-router.md), and the typeof guards make every one a no-op on a full page load, where the
- * template's own copies win the race — any theme, as before. */
+ * Bodies are verbatim from upstream except for two deltas: L.itemlist -> window.L.itemlist (the
+ * two-L trap, docs/spa-router.md), and renderBox's `[title]` — dom.append parses a scalar child as
+ * innerHTML (luci.js:1395) and an array member as text (:1383), and this file defines the global on
+ * every admin page where upstream defines it on Status -> Overview alone. Same output: nothing in
+ * 24.10, 25.12 or master calls renderBox. The typeof guards make each a no-op on a full page load,
+ * where the template's own copies win the race. */
 function ensureOverviewHelpers() {
-	/* eslint-disable no-var -- these three bodies are copied VERBATIM from LuCI's
-	   admin_status/index.ut so they can be diffed against upstream when it changes.
-	   Modernising the `var`s would silently break that property, which is the whole
-	   reason the copies are safe to carry. */
+	/* eslint-disable no-var -- these three bodies are copies of LuCI's admin_status/index.ut so
+	   they can be diffed against upstream when it changes. Modernising the `var`s would break
+	   that property, which is what makes carrying the copies safe. */
 	if (typeof window.progressbar !== 'function')
 		window.progressbar = function(query, value, max, byte) {
 			var pg = document.querySelector(query),
@@ -95,7 +161,7 @@ function ensureOverviewHelpers() {
 			childs.unshift(window.L.itemlist(E('span'), [].slice.call(arguments, 3)));
 			return E('div', { class: 'ifacebox' }, [
 				E('div', { class: 'ifacebox-head center ' + (active ? 'active' : '') },
-					E('strong', title)),
+					E('strong', [title])),
 				E('div', { class: 'ifacebox-body left' }, childs)
 			]);
 		};
@@ -109,11 +175,10 @@ function ensureOverviewHelpers() {
 	/* eslint-enable no-var */
 }
 
-/* Unconditional: the typeof guards make it a no-op wherever the real definitions already exist. */
 ensureOverviewHelpers();
 
-/* The chrome BOOTSTRAP: load the menu tree once, hand it to the parts that need it, and wire them
- * in the right order. It renders nothing itself — every piece lives in its own module:
+/* Chrome bootstrap: load the menu tree once, hand it to the parts that need it and wire them in
+ * order. It renders nothing itself — every piece lives in its own module:
  *
  *   fs-menutree    path <-> menu node, alias/firstchild resolution (a port of dispatcher.uc)
  *   fs-prefs       the Appearance axes and their localStorage
@@ -123,28 +188,23 @@ ensureOverviewHelpers();
  *   fs-sheets      the guard against a view's injected CSS repainting every later page
  *   fs-search      the page-search palette (indexes the same tree, on first open)
  *   fs-appearance  the Appearance controls, appended to the stock System page
- *   fs-overview    the overview grid — a THEME module, not a luci-mod-status include
- *   fs-version     the shipped version string (shown in the Appearance section, no network)
+ *   fs-overview    the overview grid — a theme module, not a luci-mod-status include
+ *   fs-version     the shipped version string
  *
- *
- * They compose by CALLING each other, never by inheriting: LuCI instantiates every required module
- * into a singleton, so `base.extend` across modules throws and a module cannot subclass another
- * (docs/conventions.md — proven, not assumed). The same constraint is why the MAIN menu arrives as a callback:
- * menu-footstrap.js is the one renderer, and it injects renderMainMenu here rather than overriding
- * a method. LuCI raises DependencyError on a require() cycle, so the graph above is a DAG by
- * construction — the shared halves (fs-menutree, fs-prefs) were pulled out precisely so that no two
- * modules have to reach across into each other. */
+ * They compose by calling, never by inheriting: LuCI makes every required module a singleton, so
+ * `base.extend` across modules throws (docs/conventions.md). Hence the main menu arriving as a
+ * callback — menu-footstrap.js injects renderMainMenu rather than overriding a method. A
+ * require() cycle raises DependencyError, so the graph is a DAG by construction and the shared
+ * halves (fs-menutree, fs-prefs) are separate modules. */
 
 return baseclass.extend({
-	/* entry point: load the menu tree, render the mode menu (which drives the injected
-	 * renderMainMenu) and the section tabs, and wire the chrome. */
 	init(renderMainMenu) {
-		/* FIRST, and outside the promise: a third-party sheet that outranks the chrome is already
-		 * painting (fs-sheets: openclash's `* { margin: 0; padding: 0 }`). Nothing below depends on
-		 * it, and hanging it off ui.menu.load() only made the broken frame last a round-trip
-		 * longer — or forever, since the .catch() below swallows a menu failure into console. */
+		/* First, and outside the promise: a third-party sheet that outranks the chrome is already
+		 * painting (fs-sheets: openclash's `* { margin: 0; padding: 0 }`). Deferring this to
+		 * ui.menu.load() extends the broken frame by a round trip, or forever when the .catch()
+		 * below swallows a menu failure. */
 		sheets.watchViewSheets();
-		prefs.guardDarkStamp();		/* a third party stamping :root — same shape, different vector */
+		prefs.guardDarkStamp();		/* same, for a third party stamping :root */
 
 		ui.menu.load().then((menu) => {
 			tree.setTree(menu);
@@ -154,27 +214,20 @@ return baseclass.extend({
 			router.seed();
 
 			/* the bar's "does the menu fit beside the brand" measurement joins the engine the
-			 * tables use: it re-runs on every #view resize (a rail collapse and a layout toggle
-			 * produce one) and on content mutations */
+			 * tables use: re-run on every #view resize and on content mutations */
 			fit.add(chrome.fitChrome);
 
 			chrome.renderChrome();
-			/* after setTree(): the palette indexes that tree — lazily, on its first open, but its
-			 * recent-pages list is recorded from the first navigation onwards */
-			search.wire();
+			wireSearch();
 			chrome.wireRail();
 			chrome.wireIndicatorCounts();
-			/* BEFORE router.wire(): the router restamps body[data-page] on every SPA navigation,
-			 * and that attribute is what the page modules key off. Wiring the observer after the
-			 * router's would still work today (the first stamp is the server's, already in the
-			 * DOM), but it would make a route change racy against a listener that is not attached
-			 * yet — cheap to order correctly, expensive to debug. */
+			/* before router.wire(): the router restamps body[data-page] on every SPA navigation,
+			 * and that attribute is what the page modules key off */
 			wirePageModules();
 			router.wire();
 			router.wireVisibility();
-		/* fs-chrome's renderTabMenu warns about exactly this, and the root chain was left bare: a
-		 * throw anywhere in the calls above took out the menu, the router and the Appearance tab
-		 * together, silently. It still fails — there is no sane partial recovery — but loudly. */
+		/* no sane partial recovery — a throw above loses the menu, the router and the Appearance
+		 * tab together — so this fails loudly rather than silently */
 		}).catch((e) => console.error('footstrap: chrome init failed', e));
 	}
 });
