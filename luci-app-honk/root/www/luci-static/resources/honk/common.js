@@ -111,6 +111,32 @@ function updateStatus(data, targetEl) {
 	}
 }
 
+// Register a poll function operating on `el` and unregister it once `el` is gone.
+// poll.add() runs the first tick synchronously when it starts the polling loop, which
+// normally happens while the view is still being rendered, i.e. before `el` has been
+// attached to the document. Tolerate that single early tick and only give up on the
+// element once it is still missing on a later tick.
+function addElementPoll(fn, el, interval, onDetach) {
+	var missing = 0;
+
+	var pollFn = function() {
+		if (document.body.contains(el)) {
+			missing = 0;
+		} else if (++missing > 1) {
+			poll.remove(pollFn);
+			if (typeof onDetach === 'function')
+				onDetach();
+			return Promise.resolve();
+		}
+
+		return fn();
+	};
+
+	poll.add(pollFn, interval);
+
+	return pollFn;
+}
+
 function waitForHonkState(wantRunning, attempts) {
 	attempts = attempts || 10;
 
@@ -125,7 +151,7 @@ function waitForHonkState(wantRunning, attempts) {
 					updateStatus(st);
 					if (poll && typeof(poll.start) === 'function')
 						poll.start();
-					resolve({ running: running, memory: st ? st.memory : null });
+					resolve({ running: running });
 				} else {
 					setTimeout(step, 1200);
 				}
@@ -159,25 +185,6 @@ function switchDashboardAndWait(type) {
 		return waitForHonkState(true).then(function(st) {
 			return { pending: false, running: st.running };
 		});
-	});
-}
-
-function applyChangesAndWait(mode) {
-	return new Promise(function(resolve) {
-		var timer = null;
-		var onApplied = function() {
-			if (timer) clearTimeout(timer);
-			document.removeEventListener('uci-applied', onApplied);
-			resolve();
-		};
-
-		var holdoff = (window.L && L.env && +L.env.apply_holdoff) || 4;
-		var timeout = (window.L && L.env && +L.env.apply_timeout) || 5;
-		timer = setTimeout(onApplied, (holdoff + timeout) * 1000);
-
-		document.addEventListener('uci-applied', onApplied);
-
-		ui.changes.apply(mode == '0');
 	});
 }
 
@@ -800,16 +807,12 @@ function renderStatusHeader() {
 	});
 
 	var pollStatusFn = function() {
-		if (!document.body.contains(statusEl)) {
-			poll.remove(pollStatusFn);
-			return Promise.resolve();
-		}
 		return callHonkStatus().then(function(st) {
 			updateStatus(st, statusEl);
 		}).catch(function() { });
 	};
 
-	poll.add(pollStatusFn, 5);
+	addElementPoll(pollStatusFn, statusEl, 5);
 
 	applyTabVisibility();
 
@@ -844,5 +847,5 @@ return baseclass.extend({
 	isServiceEnabled: isServiceEnabled,
 	showNotification: showNotification,
 	updateStatus: updateStatus,
-	applyChangesAndWait: applyChangesAndWait
+	addElementPoll: addElementPoll
 });

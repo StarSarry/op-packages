@@ -62,7 +62,6 @@ return view.extend({
 
 		return this.handleSave(ev).then(function() {
 			var newDash = uci.get('honk', sid, 'dashboard') || 'none';
-			var enabled = honk.isServiceEnabled();
 
 			var pre = (newDash !== oldDash) ? honk.switchDashboardAndWait(newDash).then(function(res) {
 				if (res && res.pending)
@@ -71,13 +70,10 @@ return view.extend({
 					throw new Error(_('HONK did not come back up; check the logs'));
 			}) : Promise.resolve();
 
+			// LuCI reloads the page right after applying, and the status header then
+			// polls the real service state on its own (see honk.addElementPoll).
 			return pre.then(function() {
-				return honk.applyChangesAndWait(mode);
-			}).then(function() {
-				return honk.waitForHonkState(enabled);
-			}).then(function(st) {
-				if (enabled && st && st.running === false)
-					throw new Error(_('HONK did not come back up; check the logs'));
+				ui.changes.apply(mode == '0');
 			});
 		}).catch(function(err) {
 			honk.showNotification(null, E('p', _('Failed to apply configuration:') + ' ' + (err.message || err)), 'error');
