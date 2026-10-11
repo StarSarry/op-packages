@@ -94,6 +94,23 @@ function isServiceEnabled() {
 	return ((sections[0] || {}).enabled === '1');
 }
 
+function updateStatus(data, targetEl) {
+	var el = targetEl || document.getElementById('honk_status');
+	if (!el) return;
+	if (data && data.running) {
+		var mem = data.memory ? ' (' + _('Memory Usage') + ': ' + data.memory + ')' : '';
+		dom.content(el, [
+			E('span', { 'style': 'color: var(--success, #22c55e); font-weight: bold;' }, _('HONK') + ' ' + _('RUNNING')),
+			' ',
+			E('span', { 'style': 'color: var(--text-muted, #888); font-size: 0.9em;' }, mem)
+		]);
+	} else {
+		dom.content(el, [
+			E('span', { 'style': 'color: var(--danger, #ef4444); font-weight: bold;' }, _('HONK') + ' ' + _('NOT RUNNING'))
+		]);
+	}
+}
+
 function waitForHonkState(wantRunning, attempts) {
 	attempts = attempts || 10;
 
@@ -104,15 +121,23 @@ function waitForHonkState(wantRunning, attempts) {
 			callHonkStatus().then(function(st) {
 				var running = !!(st && st.running);
 
-				if (running === wantRunning || ++tries >= attempts)
-					resolve({ running: running });
-				else
+				if (running === wantRunning || ++tries >= attempts) {
+					updateStatus(st);
+					if (poll && typeof(poll.start) === 'function')
+						poll.start();
+					resolve({ running: running, memory: st ? st.memory : null });
+				} else {
 					setTimeout(step, 1200);
+				}
 			}).catch(function() {
-				if (++tries >= attempts)
+				if (++tries >= attempts) {
+					updateStatus({ running: false });
+					if (poll && typeof(poll.start) === 'function')
+						poll.start();
 					resolve({ running: null });
-				else
+				} else {
 					setTimeout(step, 1200);
+				}
 			});
 		}
 
@@ -134,6 +159,25 @@ function switchDashboardAndWait(type) {
 		return waitForHonkState(true).then(function(st) {
 			return { pending: false, running: st.running };
 		});
+	});
+}
+
+function applyChangesAndWait(mode) {
+	return new Promise(function(resolve) {
+		var timer = null;
+		var onApplied = function() {
+			if (timer) clearTimeout(timer);
+			document.removeEventListener('uci-applied', onApplied);
+			resolve();
+		};
+
+		var holdoff = (window.L && L.env && +L.env.apply_holdoff) || 4;
+		var timeout = (window.L && L.env && +L.env.apply_timeout) || 5;
+		timer = setTimeout(onApplied, (holdoff + timeout) * 1000);
+
+		document.addEventListener('uci-applied', onApplied);
+
+		ui.changes.apply(mode == '0');
 	});
 }
 
@@ -621,6 +665,7 @@ function createConfigFileView(filePath, mapTitle, mapDesc, fieldTitle, successMs
 						return { skipped: true };
 
 					return needRestart ? waitForHonkState(true) : callHonkStatus().then(function(st) {
+						updateStatus(st);
 						return { running: !!(st && st.running) };
 					});
 				}).then(function(st) {
@@ -750,30 +795,18 @@ function renderStatusHeader() {
 		])
 	]);
 
-	function updateStatus(data) {
-		if (!statusEl) return;
-		if (data && data.running) {
-			var mem = data.memory ? ' (' + _('Memory Usage') + ': ' + data.memory + ')' : '';
-			dom.content(statusEl, [
-				E('span', { 'style': 'color: var(--success, #22c55e); font-weight: bold;' }, _('HONK') + ' ' + _('RUNNING')),
-				' ',
-				E('span', { 'style': 'color: var(--text-muted, #888); font-size: 0.9em;' }, mem)
-			]);
-		} else {
-			dom.content(statusEl, [
-				E('span', { 'style': 'color: var(--danger, #ef4444); font-weight: bold;' }, _('HONK') + ' ' + _('NOT RUNNING'))
-			]);
-		}
-	}
-
-	callHonkStatus().then(updateStatus);
+	callHonkStatus().then(function(st) {
+		updateStatus(st, statusEl);
+	});
 
 	var pollStatusFn = function() {
 		if (!document.body.contains(statusEl)) {
 			poll.remove(pollStatusFn);
 			return Promise.resolve();
 		}
-		return callHonkStatus().then(updateStatus).catch(function() { });
+		return callHonkStatus().then(function(st) {
+			updateStatus(st, statusEl);
+		}).catch(function() { });
 	};
 
 	poll.add(pollStatusFn, 5);
@@ -809,5 +842,7 @@ return baseclass.extend({
 	waitForHonkState: waitForHonkState,
 	switchDashboardAndWait: switchDashboardAndWait,
 	isServiceEnabled: isServiceEnabled,
-	showNotification: showNotification
+	showNotification: showNotification,
+	updateStatus: updateStatus,
+	applyChangesAndWait: applyChangesAndWait
 });
