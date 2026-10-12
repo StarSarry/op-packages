@@ -36,8 +36,8 @@
 -	--rail-w-pinned: 224px;
 +	--rail-w-pinned: 204px;
  	--top-h: 52px;
- 	--ctl-h: 32px;
- 	--content-max: 1320px;
+ 	--ctl-h: 36px;              /* every control: inputs, selects, buttons, tabs, chips */
+ 	--label-w: 180px;           /* form label column */
 @@ -328,7 +328,7 @@ html[data-darkmode="true"] .vt-brand-tile { fill: #16181b; }
  	white-space: nowrap;
  }
