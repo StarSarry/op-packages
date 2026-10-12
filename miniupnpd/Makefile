@@ -9,7 +9,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=miniupnpd
 PKG_VERSION:=2.3.11
-PKG_RELEASE:=11
+PKG_RELEASE:=12
 
 # Build from GitHub archives, as release archives differ from Git in code comments; patches cannot be 1:1 applied
 PKG_SOURCE_VERSION:=f8c4f4c3320820e615b281147b3043f66c195f17
