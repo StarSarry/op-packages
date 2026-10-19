@@ -530,7 +530,7 @@ jobs:
             name="$(echo $repo | cut -f 2 -d '/')"
             latest="$(latest $owner $name)"
             sed -i "s/PKG_SOURCE_VERSION:=.*/PKG_SOURCE_VERSION:=$(echo $latest | jq -r '.data.repository.defaultBranchRef.target.oid')/" $pkg || true
-            over="$(grep -E PKG_VERSION:=.*$ $pkg | cut -f 2 -d '=' | sed -e 's/^\(v\|release-\)//' | grep -E "[0-9]")" || true
+            over="$(grep -E 'PKG_VERSION:=.*$ $pkg' | cut -f 2 -d '=' | sed -e 's/^\(v\|release-\)//' | grep -E "[0-9]")" || true
             if [ "$over" ]; then
               ver="$(echo $latest | jq -r '.data.repository.latestRelease.tagName' | sed -e 's/^\(v\|release-\)//' | grep -E "^[^()]*$" | grep -E "[0-9]")" || true
               # [ "$ver" ] || ver="$(git ls-remote --tags git://github.com/$repo | cut -d/ -f3- | sort -t. -nk1,3 | awk '/^[^{]*$/{version=$1}END{print version}' | grep -o -E "[0-9].*")" || true
