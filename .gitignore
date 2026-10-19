@@ -16,6 +16,7 @@
 /luci-app-webdavf
 /luci-app-baidupcs-web
 /luci-app-softether
+/luci-app-adguardhome/.official_*
 /subweb
 /wget
 /mt
