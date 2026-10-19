@@ -371,6 +371,7 @@ jobs:
         git_clone https://github.com/sbwml/luci-app-mentohust mentohust1 && mvdir mentohust1
         # git_clone https://github.com/natpierce/luci-app-natpierce natpierce && mv natpierce/luci-app-natpierce ./;rm -rf natpierce
         git_clone https://github.com/huchd0/luci-app-netwiz
+        git_clone https://github.com/nooblk-98/luci-app-netstat
         ) &
         (
         git_clone https://github.com/rchen14b/luci-theme-glass
