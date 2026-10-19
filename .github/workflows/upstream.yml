@@ -234,14 +234,12 @@ jobs:
         git_clone https://github.com/meow-rs/meow-rs && mv -f meow-rs/openwrt/*meow ./;rm -rf meow-rs
         git_clone https://github.com/tpxcer/minigate
         git_clone https://github.com/OneNAS-space/luci-app-adguardhome
+        git_clone https://github.com/OneNAS-space/luci-app-beszel-agent
+        git_clone https://github.com/OneNAS-space/beszel-agent
         git_clone https://github.com/sakura-builder1/luci-app-dlna-player
         git_clone https://github.com/sakura-builder1/luci-app-wolplus
         git_clone https://github.com/SyntaxError-NullPointer/openwrt-thermal-guard && mv -f openwrt-thermal-guard/*thermal-guard ./;rm -rf openwrt-thermal-guard
         git_clone https://github.com/Nikitid/luci-app-wrqr
-        git_clone https://github.com/Nikitid/luci-app-overview-manager
-        git_clone https://github.com/YusDyr/luci-app-trafficctl trafficctl && mv -f trafficctl/luci-app* ./;rm -rf trafficctl
-        git_clone https://github.com/nooblk-98/luci-app-netstat
-        git_clone https://github.com/simonchen/luci-app-conntrack
         ) &
         (
         git_clone https://github.com/Diciya/luci-app-broadbandacc
@@ -328,6 +326,8 @@ jobs:
         git_clone https://github.com/luochongjun/luci-app-dynv6
         git_clone https://github.com/nicholas9698/luci-app-campusnet
         git_clone https://github.com/tanghammer/luci-app-switchtools
+        git_clone https://github.com/Nikitid/luci-app-overview-manager
+        git_clone https://github.com/YusDyr/luci-app-trafficctl trafficctl && mv -f trafficctl/luci-app* ./;rm -rf trafficctl
         ) &
         (
         git_clone https://github.com/leochien0102/luci-app-accesscontrol-plus accesscontrol-plus && mvdir accesscontrol-plus
@@ -356,6 +356,7 @@ jobs:
         git_clone https://github.com/AngelaCooljx/luci-theme-material3
         git_clone https://github.com/eamonxg/luci-theme-aurora
         git clone https://github.com/koshev-msk/mwan3-nft -b my-25.12
+        git_clone https://github.com/simonchen/luci-app-conntrack
         ) &
         (
         git_clone https://github.com/bobbyunknown/FusionTunX && mv -f FusionTunX/openwrt/* ./ && rm -rf FusionTunX
@@ -368,7 +369,6 @@ jobs:
         git_clone https://github.com/calfeche13/luci-app-public-ip-monitor
         git_clone https://github.com/tty228/luci-app-wechatpush
         git_clone https://github.com/sbwml/luci-app-mentohust mentohust1 && mvdir mentohust1
-        git_clone https://github.com/vernette/beszel-agent-openwrt && mvdir beszel-agent-openwrt
         # git_clone https://github.com/natpierce/luci-app-natpierce natpierce && mv natpierce/luci-app-natpierce ./;rm -rf natpierce
         git_clone https://github.com/huchd0/luci-app-netwiz
         ) &
