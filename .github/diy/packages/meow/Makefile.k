@@ -5,11 +5,11 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=meow
-PKG_VERSION:=v0.24.0
+PKG_VERSION:=0.24.0
 PKG_RELEASE:=1
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
-PKG_SOURCE_URL:=https://codeload.github.com/meow-rs/meow-rs/tar.gz/$(PKG_VERSION)?
+PKG_SOURCE_URL:=https://codeload.github.com/meow-rs/meow-rs/tar.gz/v$(PKG_VERSION)?
 PKG_HASH:=skip
 PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(PKG_VERSION)
 
