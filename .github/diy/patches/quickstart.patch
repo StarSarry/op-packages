@@ -10,7 +10,7 @@
 +  	  el.remove(); // 或 el.style.display = 'none';
 +  	  }
 +  	  });
-+    }, 1000);
++    }, 800);
      })();
  </script>
  <div id="app">
