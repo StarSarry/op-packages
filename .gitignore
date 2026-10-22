@@ -17,6 +17,7 @@
 /luci-app-baidupcs-web
 /luci-app-softether
 /luci-app-adguardhome/.official_*
+/luci-app-argon-config
 /subweb
 /wget
 /mt
