@@ -1,8 +1,8 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-open-box
-PKG_VERSION:=0.1.360
-PKG_RELEASE:=46
+PKG_VERSION:=0.1.361
+PKG_RELEASE:=47
 
 PKG_MAINTAINER:=liandu2024
 PKG_LICENSE:=GPL-3.0-or-later
