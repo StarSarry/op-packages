@@ -117,19 +117,6 @@ return baseclass.extend({
 			]));
 		}
 
-		if (uci.get('system', '@system[0]', 'links') !== '0') {
-			table.appendChild(E('tr', { 'class': 'tr' }, [
-				E('td', { 'class': 'td', 'colspan': 2, 'style': 'padding: 10px 12px;' }, [
-					E('div', { 'style': 'display: flex; justify-content: space-around; align-items: center; text-align: center;' }, [
-						E('a', { 'href': 'https://openwrt.ai/', 'target': '_blank' }, [ '固件下载与定制' ]),
-						E('a', { 'href': 'https://openwrt.ai/fadian/', 'target': '_blank', 'style': 'color: orangered;' }, [ '赞助' ]),
-						E('a', { 'href': 'https://github.com/kiddin9/Kwrt', 'target': '_blank' }, [ '源码与反馈' ]),
-						E('a', { 'href': 'https://t.me/opkwrt', 'target': '_blank' }, [ 'TG交流' ])
-					])
-				])
-			]));
-		}
-
 		return table;
 	}
 });
