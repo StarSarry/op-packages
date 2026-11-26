@@ -75,12 +75,21 @@ return L.view.extend({
         return callGetStatus().then(L.bind(function(status) {
             if (!status) return;
             var isRunning = (status.running == 1);
+            var isDegraded = (status.degraded == 1);
             var container = node || document;
             
             var statusEl = container.querySelector('#service-status');
             if (statusEl) {
                 var content = [];
-                if (isRunning) {
+                if (isRunning && isDegraded) {
+                    content.push(E('span', { 'style': 'color: #FF9800; font-weight: bold;' }, [ _('degraded (direct fallback)') ]));
+                    content.push(' ');
+                    content.push(E('button', {
+                        'class': 'btn cbi-button cbi-button-apply',
+                        'style': 'margin-left: 10px;',
+                        'click': ui.createHandlerFn(this, 'handleRestart')
+                    }, [ _('Restart') ]));
+                } else if (isRunning) {
                     var chains = [];
                     if (status.nft && status.nft.tcp) chains.push('TCP');
                     if (status.nft && status.nft.udp) chains.push('UDP');
@@ -105,7 +114,7 @@ return L.view.extend({
                 var dcontent = [];
                 if (status.dns_running == 1) {
                     var ip = status.proxy_server_ip_addr || '-';
-                    var port = status.proxy_server_dns_port || '5353';
+                    var port = status.proxy_server_dns_port || '53';
                     dcontent.push(E('span', { 'style': 'color: green; font-weight: bold;' }, [ _('running') ]));
                     dcontent.push(' (' + ip + ':');
                     dcontent.push(E('span', { 'style': 'color: #FF9800; font-weight: bold;' }, [ port ]));
@@ -114,6 +123,26 @@ return L.view.extend({
                     dcontent.push(E('span', { 'style': 'color: red; font-weight: bold;' }, [ _('stopped') ]));
                 }
                 L.dom.content(dnsEl, dcontent);
+            }
+
+            var wdEl = container.querySelector('#watchdog-status');
+            if (wdEl) {
+                var wcontent = [];
+                if (status.monitor_enabled != 1) {
+                    wcontent.push(E('span', { 'style': 'color: #888;' }, [ _('not enabled') ]));
+                } else if (!isRunning) {
+                    wcontent.push(E('span', { 'style': 'color: red; font-weight: bold;' }, [ _('stopped') ]));
+                } else if (status.watchdog_running == 1 && isDegraded) {
+                    wcontent.push(E('span', { 'style': 'color: #FF9800; font-weight: bold;' }, [ _('running - degraded direct fallback') ]));
+                } else if (status.watchdog_running == 1) {
+                    var wip = status.proxy_server_ip_addr || '-';
+                    var interval = status.monitor_interval || 5;
+                    wcontent.push(E('span', { 'style': 'color: green; font-weight: bold;' }, [ _('running') ]));
+                    wcontent.push(' (' + wip + ' / ' + interval + 's)');
+                } else {
+                    wcontent.push(E('span', { 'style': 'color: red; font-weight: bold;' }, [ _('not running') ]));
+                }
+                L.dom.content(wdEl, wcontent);
             }
         }, this));
     },
@@ -185,8 +214,33 @@ return L.view.extend({
         o.rawhtml = true;
         o.cfgvalue = function() { return '<div id="dns-status" style="display:inline-block;">-</div>'; };
 
+        o = s.taboption('settings', form.DummyValue, '_watchdog_status', _('Watchdog Status'));
+        o.rawhtml = true;
+        o.cfgvalue = function() { return '<div id="watchdog-status" style="display:inline-block;">-</div>'; };
+
         s.taboption('settings', form.Flag, 'enabled', _('Enable FlowProxy')).rmempty = false;
         s.taboption('settings', form.Flag, 'dns_proxy_enabled', _('Force upstream DNS to proxy server')).rmempty = false;
+        o = s.taboption('settings', form.Flag, 'monitor_enabled', _('Enable proxy server monitoring'));
+        o.default = '0';
+        o.rmempty = false;
+
+        o = s.taboption('settings', form.Value, 'monitor_interval', _('Probe interval (seconds)'));
+        o.datatype = 'and(uinteger,min(2))';
+        o.default = '5';
+        o.rmempty = false;
+        o.depends('monitor_enabled', '1');
+
+        o = s.taboption('settings', form.Value, 'monitor_fail_threshold', _('Failure threshold'));
+        o.datatype = 'and(uinteger,min(1))';
+        o.default = '3';
+        o.rmempty = false;
+        o.depends('monitor_enabled', '1');
+
+        o = s.taboption('settings', form.Value, 'monitor_recover_threshold', _('Recovery threshold'));
+        o.datatype = 'and(uinteger,min(1))';
+        o.default = '2';
+        o.rmempty = false;
+        o.depends('monitor_enabled', '1');
 
         o = s.taboption('settings', form.Value, 'proxy_server_ip_addr', _('Proxy server IP address'));
         o.datatype = 'ip4addr'; o.rmempty = true;
@@ -196,9 +250,9 @@ return L.view.extend({
             var enabled = s.formvalue('global', 'enabled') || uci.get('flowproxy', 'global', 'enabled');
             if (enabled === '1') {
                 var ipVal = s.formvalue('global', 'proxy_server_ip_addr') || uci.get('flowproxy', 'global', 'proxy_server_ip_addr');
-                var ifaceVal = s.formvalue('global', 'interface') || uci.get('flowproxy', 'global', 'interface');
+                var ifaceVal = s.formvalue('global', 'interface') || uci.get('flowproxy', 'global', 'interface') || 'auto';
 
-                if (ipVal && ifaceVal) {
+                if (ipVal) {
                     var ipInCidr = function(ipStr, cidrStr) {
                         if (!cidrStr || cidrStr.indexOf(':') !== -1 || !ipStr || ipStr.indexOf(':') !== -1) return false;
                         var parts = cidrStr.split('/');
@@ -219,28 +273,67 @@ return L.view.extend({
                         return (ipNum & mask) === (cidrNum & mask);
                     };
 
-                    var target_iface = null;
-                    for (var i = 0; i < ifaces.length; i++) {
-                        var dev = ifaces[i].getL3Device() || ifaces[i].getDevice();
-                        if ((dev && dev.getName() === ifaceVal) || ifaces[i].getName() === ifaceVal) {
-                            target_iface = ifaces[i];
-                            break;
+                    if (ifaceVal === 'auto') {
+                        var allIps = [];
+                        for (var i = 0; i < ifaces.length; i++) {
+                            if (ifaces[i].getName() === 'loopback') continue;
+                            var netIps = ifaces[i].getIPAddrs ? ifaces[i].getIPAddrs() : [];
+                            for (var k = 0; k < netIps.length; k++) {
+                                if (allIps.indexOf(netIps[k]) === -1) allIps.push(netIps[k]);
+                            }
                         }
-                    }
-
-                    if (target_iface) {
-                        var ips = target_iface.getIPAddrs();
-                        if (ips && ips.length > 0) {
-                            var inSubnet = false;
-                            for (var j = 0; j < ips.length; j++) {
-                                if (ipInCidr(ipVal, ips[j])) {
-                                    inSubnet = true;
+                        for (var dIdx = 0; dIdx < devices.length; dIdx++) {
+                            if (devices[dIdx].getName() === 'lo') continue;
+                            var devIps = devices[dIdx].getIPAddrs ? devices[dIdx].getIPAddrs() : [];
+                            for (var dk = 0; dk < devIps.length; dk++) {
+                                if (allIps.indexOf(devIps[dk]) === -1) allIps.push(devIps[dk]);
+                            }
+                        }
+                        if (allIps.length > 0) {
+                            var matchedAny = false;
+                            for (var mIdx = 0; mIdx < allIps.length; mIdx++) {
+                                if (ipInCidr(ipVal, allIps[mIdx])) {
+                                    matchedAny = true;
                                     break;
                                 }
                             }
-                            if (!inSubnet) {
-                                ui.addNotification(null, E('p', _('The proxy server IP address must be within the subnet of the selected interface (%s).').format(ips.join(', '))), 'danger');
+                            if (!matchedAny) {
+                                ui.addNotification(null, E('p', _('The proxy server IP address must be within a local interface subnet (%s).').format(allIps.join(', '))), 'danger');
                                 return Promise.reject(new Error('Proxy IP subnet mismatch'));
+                            }
+                        }
+                    } else {
+                        var target_iface = null;
+                        for (var i = 0; i < ifaces.length; i++) {
+                            var dev = ifaces[i].getL3Device() || ifaces[i].getDevice();
+                            if ((dev && dev.getName() === ifaceVal) || ifaces[i].getName() === ifaceVal) {
+                                target_iface = ifaces[i];
+                                break;
+                            }
+                        }
+                        if (!target_iface) {
+                            for (var dIdx2 = 0; dIdx2 < devices.length; dIdx2++) {
+                                if (devices[dIdx2].getName() === ifaceVal) {
+                                    target_iface = devices[dIdx2];
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (target_iface && target_iface.getIPAddrs) {
+                            var ips = target_iface.getIPAddrs();
+                            if (ips && ips.length > 0) {
+                                var inSubnet = false;
+                                for (var j = 0; j < ips.length; j++) {
+                                    if (ipInCidr(ipVal, ips[j])) {
+                                        inSubnet = true;
+                                        break;
+                                    }
+                                }
+                                if (!inSubnet) {
+                                    ui.addNotification(null, E('p', _('The proxy server IP address must be within the subnet of the selected interface (%s).').format(ips.join(', '))), 'danger');
+                                    return Promise.reject(new Error('Proxy IP subnet mismatch'));
+                                }
                             }
                         }
                     }
@@ -250,15 +343,25 @@ return L.view.extend({
         };
 
         o = s.taboption('settings', form.Value, 'proxy_server_dns_port', _('Proxy server DNS port'));
-        o.datatype = 'port'; o.default = '5353'; o.rmempty = false;
+        o.datatype = 'port'; o.default = '53'; o.rmempty = false;
 
         o = s.taboption('settings', form.ListValue, 'interface', _('Proxy server interface'));
+        o.value('auto', _('Auto detect'));
         devices.forEach(function(d) { o.value(d.getName(), d.getName()); });
-        o.default = 'br-lan';
+        o.default = 'auto';
+        o.rmempty = false;
 
-        s.taboption('settings', form.Value, 'traffic_mark', _('Traffic Mark')).datatype = 'or(uinteger, hex)';
-        s.taboption('settings', form.Value, 'routing_table', _('Routing Table ID')).datatype = 'and(uinteger,range(1, 4294967295))';
-        s.taboption('settings', form.Value, 'rule_priority', _('Rule Priority')).datatype = 'and(uinteger,range(0, 4294967295))';
+        o = s.taboption('settings', form.Value, 'traffic_mark', _('Traffic Mark'));
+        o.datatype = 'or(uinteger, hex)';
+        o.default = '0x666';
+
+        o = s.taboption('settings', form.Value, 'routing_table', _('Routing Table ID'));
+        o.datatype = 'and(uinteger,range(1, 4294967295))';
+        o.default = '888';
+
+        o = s.taboption('settings', form.Value, 'rule_priority', _('Rule Priority'));
+        o.datatype = 'and(uinteger,range(0, 4294967295))';
+        o.default = '10000';
 
         // --- Rules ---
         var nftsets = uci.sections('flowproxy', 'nftset').map(function(ss) { return '@' + ss['.name']; });

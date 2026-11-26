@@ -30,6 +30,12 @@ const callIwinfoDevices = rpc.declare({
 	method: 'devices',
 	expect: { devices: [] }
 });
+const callIwinfoScanCompat = rpc.declare({
+	object: 'iwinfo',
+	method: 'scan',
+	params: [ 'device' ],
+	expect: { results: [] }
+});
 const callSystemBoard = rpc.declare({
 	object: 'system',
 	method: 'board',
@@ -451,13 +457,13 @@ function isNetworkDisplayUp(radioNet) {
 
 function getRadioDisplayName(radioDev) {
 	const info = cachedIwinfoInfoMap?.[radioDev.getName()];
-	if (info?.hardware?.name)
+	if (info?.hardware?.name && !/^Generic(?:\s|$)/i.test(info.hardware.name))
 		return info.hardware.name + (info.hwmodes_text ? ' 802.11' + info.hwmodes_text : '');
 	const name = radioDev.getI18n().replace(/ Wireless Controller .+$/, '');
 	const hwtype = uci.get('wireless', radioDev.getName(), 'type');
 	const hwmode = uci.get('wireless', radioDev.getName(), 'hwmode') || '';
 
-	if (!/^Generic unknown$/.test(name) && !/^Generic 802\.11unknown$/.test(name))
+	if (!/^Generic(?:\s|$)/i.test(name))
 		return name;
 
 	if (!isQcaWifiHwtype(hwtype))
@@ -677,8 +683,6 @@ function getDisplayTxPower(radioNet) {
 
 		if (isPlausibleTxPowerValue(txpower, hwtype))
 			return txpower;
-		if (isPlausibleTxPowerValue(cfgvalue, hwtype))
-			return cfgvalue;
 		return null;
 	}
 
@@ -934,13 +938,13 @@ function getFrequencyListBand(entry, hwmode) {
 	return null;
 }
 
-function normalizeIwinfoBitRate(rate) {
+function normalizeIwinfoBitRate(rate, inKbit = false) {
 	rate = +rate;
 
 	if (isNaN(rate) || rate <= 0)
 		return null;
 
-	return (rate > 100000) ? (rate / 1000) : rate;
+	return (inKbit || rate > 100000) ? (rate / 1000) : rate;
 }
 
 function getIwinfoInfoCandidates(radioNet) {
@@ -968,9 +972,10 @@ function getIwinfoInfoCandidates(radioNet) {
 }
 
 function getDisplayIwinfoBitRate(radioNet) {
+	const inKbit = isQcaWifiHwtype(uci.get('wireless', radioNet.getWifiDeviceName(), 'type'));
 	for (const candidate of getIwinfoInfoCandidates(radioNet)) {
 		const info = cachedIwinfoInfoMap ? cachedIwinfoInfoMap[candidate] : null;
-		const rate = normalizeIwinfoBitRate(info != null ? info.bitrate : null);
+		const rate = normalizeIwinfoBitRate(info != null ? info.bitrate : null, inKbit);
 
 		if (rate != null)
 			return rate;
@@ -1002,12 +1007,16 @@ function calculateEhtCapabilityRate(info, phyInfo) {
 
 function getDisplayTheoreticalBitRate(radioNet) {
 	const device = radioNet.getWifiDeviceName();
-	if (uci.get('wireless', device, 'type') != 'mt_dbdc' ||
-	    !/^EHT/.test(uci.get('wireless', device, 'htmode') || ''))
+	const hwtype = uci.get('wireless', device, 'type');
+	if (!(isQcaWifiHwtype(hwtype) && radioNet.getMode() == 'ap') &&
+	    !(hwtype == 'mt_dbdc' && /^EHT/.test(uci.get('wireless', device, 'htmode') || '')))
 		return null;
 
 	for (const candidate of getIwinfoInfoCandidates(radioNet)) {
-		const rate = cachedIwinfoInfoMap?.[candidate]?.theoretical_bitrate;
+		const info = cachedIwinfoInfoMap?.[candidate];
+		/* QSDK SIOCGIWRATE reports the BSS PHY ceiling in kbit/s. */
+		const rate = isQcaWifiHwtype(hwtype)
+			? +info?.bitrate / 1000 : info?.theoretical_bitrate;
 		if (rate > 0)
 			return rate;
 	}
@@ -1015,6 +1024,10 @@ function getDisplayTheoreticalBitRate(radioNet) {
 }
 
 function getDisplayBitRate(radioNet) {
+	if (isQcaWifiHwtype(uci.get('wireless', radioNet.getWifiDeviceName(), 'type')) &&
+	    radioNet.getMode() == 'ap')
+		return getDisplayTheoreticalBitRate(radioNet);
+
 	let rate = radioNet.getBitRate();
 	const hwmode = uci.get('wireless', radioNet.getWifiDeviceName(), 'hwmode') || '';
 	const htmode = uci.get('wireless', radioNet.getWifiDeviceName(), 'htmode') || '';
@@ -1271,7 +1284,6 @@ function parseIwPhyMaxWidthMap(stdout) {
 
 		const widthHint = rawLine.match(/Supported Channel Width:\s*(.+)$/);
 		if (widthHint) {
-			let maxWidth = 20;
 			const widths = [];
 
 			widthHint[1].replace(/\b(20|40|80|160|320)\s*MHz\b/g, function(_, mhz) {
@@ -1282,9 +1294,13 @@ function parseIwPhyMaxWidthMap(stdout) {
 				widths.push(160);
 
 			if (widths.length)
-				maxWidth = Math.max.apply(Math, widths);
+				mapping[currentPhy] = Math.max(mapping[currentPhy] || 0, Math.max.apply(Math, widths));
+			continue;
+		}
 
-			mapping[currentPhy] = Math.max(mapping[currentPhy] || 0, maxWidth);
+		const heWidth = rawLine.match(/HE(?:\s+(?:RX|TX) MCS and NSS set\s+|)(160|80\+80)(?:\s*MHz|\/5GHz)/);
+		if (heWidth) {
+			mapping[currentPhy] = Math.max(mapping[currentPhy] || 0, 160);
 			continue;
 		}
 
@@ -3002,14 +3018,18 @@ return view.extend({
 					o.wifiNetwork = radioNet;
 
 					if (ppeVpTarget) {
-						o = ss.taboption('advanced', form.Flag, 'ppe_vp', _('Enable wireless PPE acceleration'));
+						o = ss.taboption('advanced', form.Flag, 'ppe_vp', _('Enable wireless PPE acceleration'),
+							_('Direct Switch (DS): Wi-Fi exchanges packets with PPE directly, without passing them through the CPU.'));
 						o.ucisection = radioNet.getName();
-						o.enabled = 'active';
+						o.enabled = '3';
 						o.disabled = 'none';
 						o.rmempty = false;
+						/* Direct Switch is ppe_vp 3. Any other type, or none set (the
+						 * driver script then uses Active VP), shows as enabled, so saving
+						 * switches it to Direct Switch instead of writing 'none'. */
 						o.cfgvalue = function(section_id) {
 							const value = uci.get('wireless', this.ucisection ?? section_id, 'ppe_vp');
-							return (value == null || value === '') ? 'active' : value;
+							return (value === 'none' || value === '0') ? 'none' : '3';
 						};
 					}
 				}
@@ -4587,7 +4607,15 @@ return view.extend({
 		};
 
 		s.handleScanRefresh = function(radioDev, scanCache, table, stop) {
-			return radioDev.getScanList().then(L.bind(function(results) {
+			const radio = radioDev.getName();
+			const scan = isQcaWifiHwtype(uci.get('wireless', radio, 'type'))
+				? loadIwinfoResolver().then(function(resolver) {
+					const target = resolver.aliasMap[radio];
+					return target ? callIwinfoScanCompat(target) : [];
+				})
+				: radioDev.getScanList();
+
+			return scan.then(L.bind(function(results) {
 				const rows = [];
 
 				for (let r of results)

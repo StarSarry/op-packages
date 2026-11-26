@@ -2,8 +2,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: luci-app-ddns 2.4.0-1\n"
 "POT-Creation-Date: 2016-01-30 11:07+0100\n"
-"PO-Revision-Date: 2026-09-29 13:09+0000\n"
-"Last-Translator: Pavel Borecki <pavel.borecki@gmail.com>\n"
+"PO-Revision-Date: 2026-11-01 06:11+0000\n"
+"Last-Translator: LucasMZ <git@lucasmz.dev>\n"
 "Language-Team: Portuguese (Brazil) <https://hosted.weblate.org/projects/"
 "openwrt/luciapplicationsddns/pt_BR/>\n"
 "Language: pt_BR\n"
@@ -11,7 +11,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=n > 1;\n"
-"X-Generator: Weblate 2026.10.dev0\n"
+"X-Generator: Weblate 2026.11.dev0\n"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:423
 msgid "\"../\" not allowed in path for Security Reason."
@@ -48,11 +48,9 @@ msgstr "Não suportado limitar a uma rede específica"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:361
 msgid ""
-"BusyBox's nslookup and hostip do not support TCP instead of the default UDP "
-"when sending requests to the DNS server!"
+"BusyBox's nslookup does not support TCP instead of the default UDP when "
+"sending requests to the DNS server!"
 msgstr ""
-"nslookup e hostip do BusyBox não suportam que especifique para usar TCP em "
-"vez do padrão UDP quando requisitando servidor DNS!"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:372
 msgid ""
@@ -356,7 +354,7 @@ msgstr ""
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:962
 msgid "Info"
-msgstr "Informação (Info)"
+msgstr "Informações"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:264
 msgid "Information"
@@ -699,7 +697,7 @@ msgstr "Estado"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:1116
 msgid "Status"
-msgstr "Status"
+msgstr "Estado"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:410
 msgid "Status directory"
@@ -862,12 +860,9 @@ msgstr ""
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:375
 msgid ""
-"You should install 'bind-host' or 'knot-host' or 'drill' or 'hostip' "
-"package, if you need to specify a DNS server to detect your registered IP."
+"You should install 'bind-host' or 'knot-host' or 'drill' package, if you "
+"need to specify a DNS server to detect your registered IP."
 msgstr ""
-"Você deve instalar o pacote 'bind-host' ou 'knot-host' ou 'drill' ou "
-"'hostip' caso precise especificar um servidor DNS para detectar seu IP "
-"registrado."
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:323
 msgid ""
@@ -936,6 +931,21 @@ msgstr "segundos"
 msgid "to run HTTPS without verification of server certificates (insecure)"
 msgstr ""
 "para rodar HTTPS sem verificação dos certificados do servidor (não seguro)"
+
+#~ msgid ""
+#~ "BusyBox's nslookup and hostip do not support TCP instead of the default "
+#~ "UDP when sending requests to the DNS server!"
+#~ msgstr ""
+#~ "nslookup e hostip do BusyBox não suportam que especifique para usar TCP "
+#~ "em vez do padrão UDP quando requisitando servidor DNS!"
+
+#~ msgid ""
+#~ "You should install 'bind-host' or 'knot-host' or 'drill' or 'hostip' "
+#~ "package, if you need to specify a DNS server to detect your registered IP."
+#~ msgstr ""
+#~ "Você deve instalar o pacote 'bind-host' ou 'knot-host' ou 'drill' ou "
+#~ "'hostip' caso precise especificar um servidor DNS para detectar seu IP "
+#~ "registrado."
 
 #~ msgid "DDns"
 #~ msgstr "DDns"

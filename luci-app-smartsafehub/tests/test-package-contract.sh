@@ -74,6 +74,8 @@ require_executable "$ROOT_DIR/tests/test-recommended-rules.sh"
 require_executable "$ROOT_DIR/root/usr/libexec/smartsafehub-backup"
 [ ! -e "$ROOT_DIR/root/lib/upgrade/keep.d/smartsafehub" ] || fail "firmware.json must not be preserved through a SmartSafeHub keep.d rule"
 require_file "$ROOT_DIR/root/lib/upgrade/keep.d/smartsafehub-device"
+require_file "$ROOT_DIR/root/lib/upgrade/keep.d/smartsafehub-apps"
+grep -Fxq '/etc/smartsafehub/apps-installed/' "$ROOT_DIR/root/lib/upgrade/keep.d/smartsafehub-apps" || fail 'Apps installation ownership must survive sysupgrade'
 grep -Fxq '/etc/smartsafehub/device-credential.json' "$ROOT_DIR/root/lib/upgrade/keep.d/smartsafehub-device" || fail "device credential must be preserved across sysupgrade"
 require_executable "$ROOT_DIR/root/etc/uci-defaults/91-smartsafehub-firmware-identity"
 require_executable "$ROOT_DIR/root/etc/uci-defaults/92-smartsafehub-device"
@@ -182,8 +184,10 @@ fi
 
 grep -Eq '^LUCI_DEPENDS:=.*(^|[[:space:]])\+safeshield([[:space:]]|$)' "$MAKEFILE" || \
 	fail 'LUCI_DEPENDS must include +safeshield'
-grep -Eq '^LUCI_DEPENDS:=.*(^|[[:space:]])\+uclient-fetch([[:space:]]|$)' "$MAKEFILE" || \
-	fail 'LUCI_DEPENDS must include +uclient-fetch for release note downloads'
+grep -Eq '^LUCI_DEPENDS:=.*(^|[[:space:]])\+curl([[:space:]]|$)' "$MAKEFILE" || \
+	fail 'LUCI_DEPENDS must include +curl for secured outbound HTTP'
+grep -Eq '^LUCI_DEPENDS:=.*[[:space:]]\+uclient-fetch([[:space:]]|$)' "$MAKEFILE" || \
+ fail 'LUCI_DEPENDS must include +uclient-fetch for verified file downloads'
 grep -Eq '^LUCI_DEPENDS:=.*(^|[[:space:]])\+jsonfilter([[:space:]]|$)' "$MAKEFILE" || \
 	fail 'LUCI_DEPENDS must include +jsonfilter for firmware metadata validation'
 grep -Eq '^LUCI_DEPENDS:=.*(^|[[:space:]])\+igmpproxy([[:space:]]|$)' "$MAKEFILE" || \

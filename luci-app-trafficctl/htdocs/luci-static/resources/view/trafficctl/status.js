@@ -1,21 +1,20 @@
+// SPDX-License-Identifier: Apache-2.0
 'use strict';
 'require view';
 'require rpc';
 'require fs';
 'require ui';
+'require trafficctl.common as common';
 
-(function() {
-	if (!document.querySelector('link[href*="trafficctl/status.css"]')) {
-		var lnk = document.createElement('link');
-		lnk.rel = 'stylesheet';
-		lnk.type = 'text/css';
-		lnk.href = '/luci-static/resources/view/trafficctl/status.css';
-		document.head.appendChild(lnk);
-	}
-})();
-
-var TRAFFICCTL_BUILD = '20260928a';
-console.log('[trafficctl] build:' + TRAFFICCTL_BUILD);
+var RPC_INT_MAX = common.RPC_INT_MAX;
+var callBlock = common.callBlock;
+var callUnblock = common.callUnblock;
+var callMacfilterRemove = common.callMacfilterRemove;
+var callRatelimit = common.callRatelimit;
+var callShapeAdd = common.callShapeAdd;
+var callShapeRemove = common.callShapeRemove;
+var fmtRate = common.fmtRate;
+var fmtCeiling = common.fmtCeiling;
 
 // Per-device DPI app breakdown from netifyd, keyed by IP. Stays empty when the
 // agent isn't running, which is what makes the App column degrade quietly.
@@ -87,37 +86,10 @@ var callIfaces = rpc.declare({
 	expect: { result: [] }
 });
 
-var callBlock = rpc.declare({
-	object: 'luci.trafficctl',
-	method: 'block',
-	params: ['ip', 'label']
-});
-
-var callUnblock = rpc.declare({
-	object: 'luci.trafficctl',
-	method: 'unblock',
-	params: ['ip', 'label']
-});
-
 var callMacfilterAdd = rpc.declare({
 	object: 'luci.trafficctl',
 	method: 'macfilter_add',
 	params: ['ip']
-});
-
-var callMacfilterRemove = rpc.declare({
-	object: 'luci.trafficctl',
-	method: 'macfilter_remove',
-	params: ['ip']
-});
-
-var callRatelimit = rpc.declare({
-	object: 'luci.trafficctl',
-	method: 'ratelimit',
-	// rate_kbit_up is omitted for a symmetric limit rather than sent equal to
-	// rate_kbit: the backend reads absence as "same as download", and sending
-	// it always would make every record asymmetric-shaped on disk.
-	params: ['ip', 'rate_kbit', 'label', 'mode', 'rate_kbit_up']
 });
 
 var callRatelimitStats = rpc.declare({
@@ -130,18 +102,6 @@ var callSubnets = rpc.declare({
 	object: 'luci.trafficctl',
 	method: 'subnets',
 	expect: { result: [] }
-});
-
-var callShapeAdd = rpc.declare({
-	object: 'luci.trafficctl',
-	method: 'shape_add',
-	params: ['ip', 'rate_kbit', 'label', 'rate_kbit_up']
-});
-
-var callShapeRemove = rpc.declare({
-	object: 'luci.trafficctl',
-	method: 'shape_remove',
-	params: ['ip', 'label']
 });
 
 var callShapeStats = rpc.declare({
@@ -205,6 +165,20 @@ var callConfigGet = rpc.declare({
 	method: 'config_get'
 });
 
+// Names for LAN destinations (#172): the manual aliases and the DHCP leases,
+// v4 and v6. Both are reads of files the router already keeps; no DNS query.
+var callNamesList = rpc.declare({
+	object: 'luci.trafficctl',
+	method: 'names_list',
+	expect: { result: [] }
+});
+
+var callDHCPLeases = rpc.declare({
+	object: 'luci-rpc',
+	method: 'getDHCPLeases',
+	expect: { '': {} }
+});
+
 var RATE_PRESETS = [
 	{v:'0',      l: _('Off')},
 	{v:'1000',   l:_('1 Mbit/s')},
@@ -249,23 +223,26 @@ function optWindow(o) {
 function saveOpts(o) {
 	try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(o)); } catch(e) {}
 }
+// SI, as the History and Port Forwards tabs: the same total reads the same
+// on every tab (this one divided by 1024 and showed 4.66 GB for their 5.00).
 function fmtBytes(b) {
 	if (b == null || isNaN(b)) return '—';
-	if (b < 1024) return b + ' B';
-	if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
-	if (b < 1073741824) return (b/1048576).toFixed(2) + ' MB';
-	return (b/1073741824).toFixed(2) + ' GB';
+	if (b >= 1000000000000) return (b / 1000000000000).toFixed(2) + ' TB';
+	if (b >= 1000000000) return (b / 1000000000).toFixed(b >= 10000000000 ? 1 : 2) + ' GB';
+	if (b >= 1000000) return (b / 1000000).toFixed(b >= 10000000 ? 0 : 1) + ' MB';
+	if (b >= 1000) return (b / 1000).toFixed(0) + ' KB';
+	return b + ' B';
 }
 // The Bytes / TCP / UDP columns show a LIFETIME total accumulated on the
-// router by trafficctl-totals.sh, not the live conntrack sums they used to
+// router by `trafficctl totals`, not the live conntrack sums they used to
 // show. conntrack only accounts for flows that still exist, so the old numbers
 // collapsed to absurdities like "2 bytes" the moment a device went briefly
 // idle — that is issue #26.
 //
 // A negative total means the router cannot answer, which is not the same as
-// zero: under flow offload the byte source becomes nftables counter maps keyed
-// by address alone, which cannot split TCP from UDP. Printing 0 there would be
-// a confident wrong answer, i.e. the very failure this change removes.
+// zero: a total carried over from a release that read nftables counter maps
+// keyed by address alone has no TCP/UDP split. Printing 0 there would be a
+// confident wrong answer, i.e. the very failure this change removes.
 function renderTotalCell(cell, total, liveVal, since, pending, degraded) {
 	while (cell.firstChild) {
 		cell.removeChild(cell.firstChild);
@@ -282,7 +259,7 @@ function renderTotalCell(cell, total, liveVal, since, pending, degraded) {
 	// than the implausibly small live values that prompted issue #26.
 	if (degraded) {
 		cell.appendChild(E('span', { 'class': 'tc-c-err tc-fw-bold' }, '⚠'));
-		cell.title = _('Not counted: flow offload is active and this router cannot provide the nftables counters trafficctl uses in that mode, so the kernel byte counters stop updating for offloaded connections. Any total here would be far too low. See Settings → Flow Offload.');
+		cell.title = _('Not counted: flow offload is active and the flowtable has no counter, so the kernel byte counters stop updating for offloaded connections. Any total here would be far too low. See Settings → Flow Offload.');
 		return;
 	}
 	if (total == null || total < 0) {
@@ -308,12 +285,6 @@ function fmtSpeed(bps) {
 	if (bits < 1000000) { var k = bits/1000; return (k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)) + ' ' + _('Kbit/s'); }
 	if (bits < 1000000000) { var m = bits/1000000; return (m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)) + ' ' + _('Mbit/s'); }
 	var g = bits/1000000000; return (g % 1 === 0 ? g.toFixed(0) : g.toFixed(2)) + ' ' + _('Gbit/s');
-}
-function fmtRate(kbit) {
-	if (!kbit || kbit <= 0) return '—';
-	var mbit = kbit / 1000;
-	if (mbit >= 1) return (mbit % 1 === 0 ? mbit.toFixed(0) : mbit.toFixed(1)) + ' ' + _('Mbit/s');
-	return kbit + ' ' + _('kbit/s');
 }
 
 // Render a "↓ down / ↑ up" speed cell. Both halves come from the same
@@ -779,7 +750,7 @@ function renderFullGraph(history, limitKbit, width, height) {
 // LAN bridges and the VPN tunnels, and who is responsible for it.
 //
 // Every number here comes from a source that already existed — per-interface
-// kernel counters (trafficctl-ifaces.sh) and the per-device speed map the
+// kernel counters (`trafficctl ifaces`) and the per-device speed map the
 // summary table is already computing — so nothing new is collected or stored
 // on the router.
 
@@ -1018,6 +989,146 @@ function buildOverviewPanel(ifaces, ifHistory, speedMap, nameByIp, showOther, on
 
 var PRIVATE_RE = /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.)/;
 
+// ── Reverse DNS for the connection table (#165) ─────────────────────────────
+//
+// network.rrdns replies once every query has an answer or its timeout has run
+// out. AdGuard Home in front of dnsmasq (AGH on :53, dnsmasq moved to :54)
+// rate-limits each client to 20 queries a second by default and drops the
+// excess without an answer, and the router itself is one such client. The
+// view used to send every unresolved destination in one batch and throw the
+// reply away if the next device poll (3 s) had started meanwhile, so a device
+// with more than 20 destinations waited out the 5 s timeout on every tick and
+// never showed a name, and each tick sent the same batch again. Now a tick
+// sends at most RDNS_BATCH new lookups, nothing goes out twice while it is in
+// flight, and a reply is kept whenever it arrives. A destination with no
+// answer is retried after RDNS_RETRY_MS rather than shown as "—" for good.
+var RDNS_BATCH = 16;
+var RDNS_TIMEOUT = 5000;
+var RDNS_RETRY_MS = 60000;
+
+function rdnsState() {
+	return { names: {}, misses: {}, pending: {} };
+}
+
+// The destinations of dsts that need a lookup now, at most RDNS_BATCH.
+function rdnsPick(st, dsts, now) {
+	var out = [];
+	for (var i = 0; i < dsts.length && out.length < RDNS_BATCH; i++) {
+		var d = dsts[i];
+		if (st.names[d] !== undefined || st.pending[d]) continue;
+		if (st.misses[d] !== undefined && now - st.misses[d] < RDNS_RETRY_MS) continue;
+		out.push(d);
+	}
+	return out;
+}
+
+// What a host cell shows: the name, null for "no name", undefined while the
+// lookup has not finished.
+function rdnsShown(st, d) {
+	if (st.names[d] !== undefined) return st.names[d];
+	if (st.misses[d] !== undefined && !st.pending[d]) return null;
+	return undefined;
+}
+
+// lookup(addrs) is a promise of { addr: host }; paint(addr, host or null) is
+// called for every address once its answer, or the lack of one, is known.
+function rdnsResolve(st, addrs, lookup, paint, clock) {
+	addrs.forEach(function(d) { st.pending[d] = true; });
+	function done(replies) {
+		var now = clock();
+		addrs.forEach(function(d) {
+			var host = (replies && typeof(replies[d]) === 'string' && replies[d]) || null;
+			delete st.pending[d];
+			if (host) { st.names[d] = host; delete st.misses[d]; }
+			else st.misses[d] = now;
+			paint(d, host);
+		});
+	}
+	return Promise.resolve(addrs.length ? lookup(addrs) : {}).then(done, function() { done(null); });
+}
+
+// ── Names for private destinations (#172) ───────────────────────────────────
+//
+// A private (LAN) destination is never sent to rDNS: the upstream resolver
+// cannot know it, and a PTR query for it only leaks the LAN layout. Most such
+// hosts are known to the router anyway, by a manual alias or a DHCP lease, so
+// the host cell takes the name from there, and shows the bare address when
+// neither has one. The sources are re-read at most every LOCAL_NAMES_TTL ms,
+// not on every device poll.
+var LOCAL_NAMES_TTL = 60000;
+
+// ip -> name. aliases: names_list() rows; leases: luci-rpc getDHCPLeases;
+// leases4Raw: /tmp/dhcp.leases, the fallback when that call is not available.
+// The first source to name an address wins: alias, DHCPv4, DHCPv6.
+function localNames(aliases, leases, leases4Raw) {
+	var m = {};
+	function put(ip, name) {
+		ip = String(ip || '').split('/')[0].toLowerCase();
+		if (!ip || !name || name === '*' || m[ip] !== undefined) return;
+		m[ip] = String(name);
+	}
+	(aliases || []).forEach(function(a) { if (a) put(a.ip, a.name); });
+	var l = leases || {};
+	(l.dhcp_leases || []).forEach(function(x) { if (x) put(x.ipaddr, x.hostname); });
+	String(leases4Raw || '').split('\n').forEach(function(line) {
+		var p = line.trim().split(/\s+/);
+		if (p.length >= 4) put(p[2], p[3]);
+	});
+	(l.dhcp6_leases || []).forEach(function(x) {
+		if (!x) return;
+		put(x.ip6addr, x.hostname);
+		(x.ip6addrs || []).forEach(function(a) { put(a, x.hostname); });
+	});
+	return m;
+}
+
+function localName(m, dst) {
+	return (m && dst && m[String(dst).toLowerCase()]) || null;
+}
+
+// get(now) is a promise of the ip -> name map. fetch() is called only when the
+// map is older than LOCAL_NAMES_TTL, and never twice at once; a failed fetch
+// keeps the previous map and is not retried before the TTL either.
+function localNamesCache(fetch) {
+	var st = { map: {}, at: null, busy: null };
+	return {
+		get: function(now) {
+			if (st.busy) return st.busy;
+			if (st.at !== null && now - st.at < LOCAL_NAMES_TTL) return Promise.resolve(st.map);
+			st.busy = Promise.resolve().then(fetch).then(function(m) {
+				if (m) st.map = m;
+			}, function() {}).then(function() {
+				st.at = now;
+				st.busy = null;
+				return st.map;
+			});
+			return st.busy;
+		}
+	};
+}
+
+// What the host cell of a connection shows: { text, kind }, kind one of
+// name (the backend's), local (alias or lease), resolving (rDNS pending),
+// ip (a private destination nobody named) or none.
+function hostLabel(r, rdnsMode, local) {
+	var dst = r.dst || '';
+	if (r.host) return { text: r.host, kind: 'name' };
+	var n = localName(local, dst);
+	if (n) return { text: n, kind: 'local' };
+	if (rdnsMode && !PRIVATE_RE.test(dst)) return { text: '', kind: 'resolving' };
+	if (dst && PRIVATE_RE.test(dst)) return { text: dst, kind: 'ip' };
+	return { text: '—', kind: 'none' };
+}
+
+// The note under the connection table while rDNS is off: public destinations
+// get no hostname then, and the switch for it sits in the toolbar above.
+function rdnsHint(rdnsOn) {
+	return E('span', { 'class': 'tc-rdns-hint' + (rdnsOn ? ' tc-hidden' : '') }, [
+		' ' + _('Hostnames of public destinations are not looked up.') + ' ',
+		E('a', { 'href': '#tm-rdns', 'class': 'tc-link tc-rdns-hint-link' }, _('Turn on rDNS'))
+	]);
+}
+
 // ── Rate-limit targets that are not a single device ─────────────────────────
 //
 // A limit can be placed on a block of addresses ("10.0.20.0/24") or on the
@@ -1113,7 +1224,19 @@ function buildGroupedTable(groups, sortCol, sortDir) {
 	return E('div', { 'class': 'table tc-table' }, [titleRow].concat(rows));
 }
 
-function buildTable(conns, sortCol, sortDir, rdnsMode, hiddenCols) {
+// 'oif' is the uci interface name when the router has one, 'oif_dev' the
+// kernel device it resolved to. Same layout as the overview rows: the device
+// is only worth showing when it differs from the name (#10).
+function oifCell(r) {
+	if (!r.oif) return E('div', { 'class': 'td tc-mono' }, E('span', { 'class': 'tc-c-faint' }, '—'));
+	var cell = E('div', { 'class': 'td tc-mono' }, escHtml(r.oif));
+	if (r.oif_dev && r.oif_dev !== r.oif) {
+		cell.appendChild(E('span', { 'class': 'tc-c-faint tc-ov-ifdev' }, ' ' + escHtml(r.oif_dev)));
+	}
+	return cell;
+}
+
+function buildTable(conns, sortCol, sortDir, rdnsMode, hiddenCols, local) {
 	var allCols = [
 		{ key:'proto',   label: _('Proto'),    num:false },
 		{ key:'dst',     label: _('Dst IP'),   num:false },
@@ -1149,13 +1272,15 @@ function buildTable(conns, sortCol, sortDir, rdnsMode, hiddenCols) {
 			           'class':'tc-link', 'onclick': 'event.stopPropagation()' }, dst)
 			: '';
 
+		var hl = hostLabel(r, rdnsMode, local);
 		var hostCell = E('div', { 'class': 'td', 'data-dst': dst });
-		if (r.host) {
-			hostCell.textContent = r.host;
-		} else if (rdnsMode && !PRIVATE_RE.test(dst)) {
+		if (hl.kind === 'resolving') {
 			hostCell.innerHTML = '<span class="tc-c-faint" style="font-style:italic">' + _('resolving…') + '</span>';
+		} else if (hl.kind === 'ip') {
+			hostCell.appendChild(E('span', { 'class': 'tc-c-faint tc-mono' }, hl.text));
 		} else {
-			hostCell.textContent = '—';
+			hostCell.textContent = hl.text;
+			if (hl.kind === 'local') hostCell.title = _('Name from this router: device alias or DHCP lease');
 		}
 
 		var cellMap = {
@@ -1166,7 +1291,7 @@ function buildTable(conns, sortCol, sortDir, rdnsMode, hiddenCols) {
 			service: E('div', { 'class': 'td tc-c-speed' }, escHtml(r.service || (SERVICE_PORTS[r.port]||''))),
 			bytes:   E('div', { 'class': 'td tc-right tc-mono tc-fw-bold' }, fmtBytes(r.bytes)),
 			state:   E('div', { 'class': 'td tc-fw-bold' + scCls }, state),
-			oif:     E('div', { 'class': 'td tc-mono' }, r.oif ? escHtml(r.oif) : E('span', { 'class': 'tc-c-faint' }, '—'))
+			oif:     oifCell(r)
 		};
 		var cells = cols.map(function(c) { return cellMap[c.key]; });
 		return E('div', { 'class': 'tr' }, cells);
@@ -1228,6 +1353,7 @@ function buildSummaryTable(rows, sortCol, sortDir, onSort, onSelect, speedMap, d
 		r._backlog = sh ? sh.backlog : 0;
 		r._throttle_kbit = (r.shape_kbit || 0) > 0 ? r.shape_kbit : (r.rate_limit_kbit || 0);
 		r._throttle_mode = (r.shape_kbit || 0) > 0 ? 'shaper' : ((r.rate_limit_kbit || 0) > 0 ? 'limiter' : 'none');
+		r._throttle_kbit_up = r._throttle_mode === 'shaper' ? (r.shape_kbit_up || 0) : (r.rate_limit_kbit_up || 0);
 	});
 
 	var sorted = rows.slice().sort(function(a, b) {
@@ -1279,7 +1405,7 @@ function buildSummaryTable(rows, sortCol, sortDir, onSort, onSelect, speedMap, d
 		});
 		cellMap.name = E('div', { 'class': 'td tc-fw-bold tc-c-speed tc-name-cell' }, [nameText, renameBtn]);
 		cellMap.ip   = E('div', { 'class': 'td tc-mono' }, escHtml(r.ip));
-		var macEl = r.mac ? E('a', { 'href':'/cgi-bin/luci/admin/network/dhcp','target':'_blank','rel':'noopener','class':'tc-link','title':_('Open DHCP/DNS bindings'),'onclick':'event.stopPropagation()' }, r.mac) : '';
+		var macEl = r.mac ? E('a', { 'href':L.url('admin/network/dhcp'),'target':'_blank','rel':'noopener','class':'tc-link','title':_('Open DHCP/DNS bindings'),'onclick':'event.stopPropagation()' }, r.mac) : '';
 		cellMap.mac  = E('div', { 'class': 'td tc-mono tc-sm tc-c-muted' }, macEl || '');
 
 		// Down and up are measured separately (bytes_in / bytes_out); showing
@@ -1369,8 +1495,8 @@ function buildSummaryTable(rows, sortCol, sortDir, onSort, onSelect, speedMap, d
 		cellMap.app = E('div', { 'class': 'td tc-center' }, appBadge);
 
 		var throttleBadge;
-		if (r._throttle_mode === 'shaper') { throttleBadge = E('span', { 'class': 'tc-c-speed tc-fw-bold', 'title': _('Shaper (tc/HTB queue)') }, '≈ ' + fmtRate(r._throttle_kbit)); }
-		else if (r._throttle_mode === 'limiter') { throttleBadge = E('span', { 'class': 'tc-c-warn tc-fw-bold', 'title': _('Limiter (nft drop)') }, '⚡ ' + fmtRate(r._throttle_kbit)); }
+		if (r._throttle_mode === 'shaper') { throttleBadge = E('span', { 'class': 'tc-c-speed tc-fw-bold', 'title': _('Shaper (tc/HTB queue)') }, '≈ ' + fmtCeiling(r._throttle_kbit, r._throttle_kbit_up)); }
+		else if (r._throttle_mode === 'limiter') { throttleBadge = E('span', { 'class': 'tc-c-warn tc-fw-bold', 'title': _('Limiter (nft drop)') }, '⚡ ' + fmtCeiling(r._throttle_kbit, r._throttle_kbit_up)); }
 		else { throttleBadge = E('span', { 'class': 'tc-c-faint' }, '—'); }
 		cellMap._throttle_kbit = E('div', { 'class': 'td tc-center' }, throttleBadge);
 
@@ -1395,6 +1521,13 @@ function setStatus(el, type, msg) {
 	var cls = {loading: '', ok: 'success', error: 'error', action: 'warning'};
 	el.className = 'alert-message ' + (cls[type] || '');
 	el.innerHTML = type === 'loading' ? '<span class="tc-spinner"></span>'+escHtml(msg) : escHtml(msg);
+}
+
+// setStatus rewrites className wholesale, which drops the tc-hidden the status
+// element starts with — so putting it back has to be explicit.
+function clearStatus(el) {
+	el.className = 'tc-hidden';
+	el.innerHTML = '';
 }
 
 function updateUrlParams(opts) {
@@ -1795,13 +1928,13 @@ return view.extend({
 	_deviceTimer:  null,
 	_pollMode:     null,
 	_onPopState:   null,
-	_rdnsCache:    {},
+	_rdns:         rdnsState(),
+	_localNames:   null,
 	_sortCol:    'bytes',
 	_sortDir:    'desc',
 	_sumCol:     'name',
 	_sumDir:     'asc',
 	_hiddenCols: {},
-	_queryGen:   0,
 
 	load: function() {
 		// config_get rides along with the leases so the router-wide Poll and
@@ -1839,6 +1972,15 @@ return view.extend({
 		});
 		devices.sort(function(a, b) { return a.name.localeCompare(b.name); });
 
+		// Names for the private destinations of the connection table. The
+		// lease file read above stands in for DHCPv4 if luci-rpc is denied.
+		self._localNames = localNamesCache(function() {
+			return Promise.all([
+				callNamesList().catch(function() { return []; }),
+				callDHCPLeases().catch(function() { return {}; })
+			]).then(function(r) { return localNames(r[0], r[1], leasesRaw); });
+		});
+
 		var savedIp = opts.lastIp || '__all__';
 
 		function onDeviceSelect(value) {
@@ -1849,6 +1991,8 @@ return view.extend({
 			}
 			renderRecentChips();
 			updateModeUI();
+			// The split row describes the device it was opened for.
+			_upPinned = false;
 			runQuery();
 		}
 
@@ -1991,7 +2135,11 @@ return view.extend({
 		});
 		var rdnsCheck = mkToggle('tm-rdns', _('rDNS'), opts.rdns, function() {
 			var o = loadOpts(); o.rdns = this.checked; saveOpts(o); updateUrlParams(o);
+			var on = this.checked;
+			Array.prototype.forEach.call(connsDiv.querySelectorAll('.tc-rdns-hint'),
+				function(h) { h.classList.toggle('tc-hidden', on); });
 		});
+		rdnsCheck.title = _('Look up hostnames of public destinations by reverse DNS');
 		var extStatsCheck = mkToggle('tm-extended', _('Extended'), opts.extendedStats, function() {
 			var o = loadOpts(); o.extendedStats = this.checked; saveOpts(o); updateUrlParams(o);
 			extStatsDiv.classList.toggle('tc-hidden', !this.checked);
@@ -2057,7 +2205,7 @@ return view.extend({
 			defaultsSaveBtn.disabled = true;
 			defaultsSaveStatus.textContent = _('Saving…');
 			defaultsSaveStatus.style.color = 'var(--tc-muted)';
-			callConfigSet(null, null, null, null, poll, win).then(function(res) {
+			callConfigSet(undefined, undefined, undefined, undefined, poll, win).then(function(res) {
 				var ok = res && res.ok;
 				defaultsSaveStatus.textContent = ok ? '✓' : ('✗ ' + ((res && res.msg) || ''));
 				defaultsSaveStatus.style.color = ok ? 'var(--tc-ok)' : 'var(--tc-err)';
@@ -2091,34 +2239,59 @@ return view.extend({
 		});
 
 		var statusDiv = E('div', { 'class': 'tc-hidden' });
+
+		// #106: a refresh that runs on a timer must not announce itself on the
+		// status line. It gets its own indicator, which cannot disturb the
+		// page: a fixed-size slot that is always in the layout and is only
+		// faded in, never displayed or hidden (tc-hidden is display:none, which
+		// is exactly the reflow being fixed). It waits before showing, so on a
+		// router that answers quickly it never appears at all — a spinner that
+		// blinks for 80ms every two seconds is still a flash.
+		//
+		// A refresh reports its own health HERE and nowhere else. The status
+		// line belongs to what the operator did: every other poller in this
+		// view discards its errors outright, and these two were the only ones
+		// writing to a shared element, which is the whole of #106.
+		var pollSpinner = E('span', { 'class': 'tc-poll-spinner' });
+		var _pollBusy = 0, _pollShowTimer = null;
+		function pollStart() {
+			_pollBusy++;
+			if (_pollShowTimer === null) {
+				_pollShowTimer = setTimeout(function() {
+					_pollShowTimer = null;
+					if (_pollBusy > 0) pollSpinner.classList.add('is-busy');
+				}, 250);
+			}
+		}
+		// err: the message when this refresh failed, nothing when it worked.
+		function pollEnd(err) {
+			if (_pollBusy > 0) _pollBusy--;
+			if (_pollBusy > 0) return;
+			if (_pollShowTimer !== null) { clearTimeout(_pollShowTimer); _pollShowTimer = null; }
+			pollSpinner.classList.remove('is-busy');
+			pollSpinner.classList.toggle('is-error', !!err);
+			pollSpinner.title = err || '';
+		}
 		var statsDiv  = E('div', { 'style': 'margin:8px 0', 'class': opts.showStats === false ? 'tc-hidden' : '' });
 		var connsDiv  = E('div', { 'class': opts.showConns === false ? 'tc-hidden' : '' });
 
-		function _rdnsBatch(addrs, gen) {
+		function paintHost(dst, host) {
+			Array.prototype.forEach.call(
+				connsDiv.querySelectorAll('[data-dst="'+dst+'"]'),
+				function(cell) {
+					if (host) { cell.textContent = host; cell.style.color = ''; }
+					else { cell.innerHTML = '<span class="tc-c-faint">—</span>'; }
+				}
+			);
+		}
+
+		// No generation check: a name is a name whichever poll asked for it,
+		// and the cells are looked up in the table on screen when it lands.
+		function _rdnsBatch(addrs) {
 			if (!addrs.length) return;
-			callNetworkRrdnsLookup(addrs, 5000, addrs.length).then(function(replies) {
-				if (gen !== self._queryGen) return;
-				addrs.forEach(function(dst) {
-					var host = (replies && replies[dst]) || null;
-					self._rdnsCache[dst] = host;
-					Array.prototype.forEach.call(
-						connsDiv.querySelectorAll('[data-dst="'+dst+'"]'),
-						function(cell) {
-							if (host) { cell.textContent = host; cell.style.color = ''; }
-							else { cell.innerHTML = '<span class="tc-c-faint">—</span>'; }
-						}
-					);
-				});
-			}).catch(function() {
-				if (gen !== self._queryGen) return;
-				addrs.forEach(function(dst) {
-					self._rdnsCache[dst] = null;
-					Array.prototype.forEach.call(
-						connsDiv.querySelectorAll('[data-dst="'+dst+'"]'),
-						function(cell) { cell.innerHTML = '<span class="tc-c-faint">—</span>'; }
-					);
-				});
-			});
+			rdnsResolve(self._rdns, addrs, function(a) {
+				return callNetworkRrdnsLookup(a, RDNS_TIMEOUT, a.length);
+			}, paintHost, Date.now);
 		}
 
 		// Speed graph popup on spark cell hover
@@ -2200,10 +2373,21 @@ return view.extend({
 		}
 		updateInetBtn(false);
 
-		function updateWifiBtn(wifiBlocked, hasMac) {
-			if (!hasMac) { wifiBtn.classList.add('tc-hidden'); return; }
+		// filter is the backend's wifi_filter: "none" on a router without any
+		// wifi-iface (wired-only builds), "temporary" where the optional
+		// hostapd-utils is missing and a block is only a timed hostapd ban,
+		// "full" otherwise. Older backends send nothing, read as "full". An
+		// existing block is always offered for removal, whatever the router
+		// can do now.
+		function updateWifiBtn(wifiBlocked, hasMac, filter) {
+			if (!hasMac || (filter === 'none' && !wifiBlocked)) { wifiBtn.classList.add('tc-hidden'); return; }
 			wifiBtn.classList.remove('tc-hidden');
 			wifiBtn.disabled = false;
+			if (filter === 'temporary') {
+				wifiBtn.setAttribute('data-tip', _('hostapd-utils is not installed: a WiFi block lasts one hour and does not reach the running radio ACL. Install hostapd-utils for permanent blocks.'));
+			} else {
+				wifiBtn.removeAttribute('data-tip');
+			}
 			if (wifiBlocked) {
 				wifiBtn.textContent = _('Unblock WiFi');
 				wifiBtn.className = 'cbi-button cbi-button-positive';
@@ -2222,6 +2406,9 @@ return view.extend({
 		// it would close the field (and overwrite what is being typed) a few
 		// seconds after it was opened.
 		var _customPinned = false;
+		// The upload row's counterpart: set while the operator has it open
+		// for editing, so the poll does not refill or close it under them.
+		var _upPinned = false;
 		var _modeSelected = 'shaper';
 
 		var rateChipsRow = E('div', {'class':'tc-chips-row'});
@@ -2327,12 +2514,28 @@ return view.extend({
 		var upToggleBtn = E('span', {'class': 'tc-chip',
 			'data-tip': _('Give upload its own ceiling instead of matching download')
 		}, '⇅ ' + _('Split up/down'));
-		upToggleBtn.addEventListener('click', function() {
-			upRow.classList.toggle('tc-hidden');
-			var on = !upRow.classList.contains('tc-hidden');
+		function showUpRow(on) {
+			upRow.classList.toggle('tc-hidden', !on);
 			upToggleBtn.classList.toggle('tc-chip--active', on);
-			if (on) { upInput.focus(); } else { upInput.value = ''; }
+			if (!on) { upInput.value = ''; }
+		}
+		upToggleBtn.addEventListener('click', function() {
+			var on = upRow.classList.contains('tc-hidden');
+			showUpRow(on);
+			_upPinned = on;
+			if (on) { upInput.focus(); }
 			updateScopeExplain();
+		});
+		// The row has no button of its own: Enter applies the pair, as does
+		// picking a download rate.
+		upInput.addEventListener('keydown', function(ev) {
+			if (ev.key !== 'Enter') { return; }
+			ev.preventDefault();
+			if (getRateKbit() === '0') {
+				setStatus(statusDiv, 'error', _('Pick a download speed as well: the upload one is applied with it.'));
+				return;
+			}
+			applyRate();
 		});
 		rateChipsRow.appendChild(upToggleBtn);
 
@@ -2446,7 +2649,7 @@ return view.extend({
 			// this row exists on the first render.
 			if (!scopeExplain) { return; }
 			var t = (scopeInput.value || 'all').trim();
-			var shown = (t === 'all' || t === 'any') ? _('every device') : t;
+			var whole = (t === 'all' || t === 'any' || t === '0.0.0.0/0');
 			var kbit = parseInt(getRateKbit(), 10);
 			// The sentence has to quote the rate that will actually be applied.
 			// Naming only the download figure while a split ceiling is set would
@@ -2459,18 +2662,26 @@ return view.extend({
 				: fmtRate(kbit);
 			// A split ceiling is two buckets, one per direction, so the aggregate
 			// wording changes with it.
-			var sharedTail = (kbitUp && kbitUp !== kbit)
-				? _('between them — one bucket per direction for the whole subnet.')
-				: _('between them — one bucket for the whole subnet.');
+			var split = !!(kbitUp && kbitUp !== kbit);
 			if (!kbit || kbit <= 0) {
 				scopeExplain.textContent =
 					_('Pick a rate to apply it to this target, or Off to remove its limit.');
 			} else if (_scopeSelected === 'shared') {
-				scopeExplain.textContent = _('All of') + ' ' + shown + ' ' + _('share') + ' ' +
-					rateWords + ' ' + sharedTail;
+				// One format string per sentence, so a translation can put the
+				// target and the rate where its grammar wants them.
+				if (whole) {
+					scopeExplain.textContent = (split
+						? _('All devices share %s between them — one bucket per direction for the whole network.')
+						: _('All devices share %s between them — one bucket for the whole network.')).format(rateWords);
+				} else {
+					scopeExplain.textContent = (split
+						? _('All of %s share %s between them — one bucket per direction for the whole subnet.')
+						: _('All of %s share %s between them — one bucket for the whole subnet.')).format(t, rateWords);
+				}
 			} else {
-				scopeExplain.textContent = _('Every device in') + ' ' + shown + ' ' +
-					_('may use') + ' ' + rateWords + ' ' + _('of its own.');
+				scopeExplain.textContent = whole
+					? _('Every device may use %s of its own.').format(rateWords)
+					: _('Every device in %s may use %s of its own.').format(t, rateWords);
 			}
 
 			var bad = !targetIsMonitored(t);
@@ -2582,6 +2793,7 @@ return view.extend({
 			scopeRow,
 			rateChipsRow,
 			customRow,
+			upRow,
 			subnetLimitsBox
 		]);
 
@@ -2596,12 +2808,33 @@ return view.extend({
 			setValue: function(v) { _modeSelected = v; updateModeToggle(); },
 			el: modeToggle
 		};
+		// shaping is the backend's capability: "none" without tc (the
+		// package trafficctl-shaper is not installed), "nohtb" without the
+		// HTB qdisc module, "download" without kmod-ifb, "full" otherwise.
+		// Older backends send nothing, read as "full". A shape already in
+		// force keeps the Shaper choice, so it can still be changed or
+		// removed.
+		var SHAPER_TIP = shaperBtn.getAttribute('data-tip');
+		function updateShaperBtn(shaping, curShapeRate) {
+			var hide = shaping === 'none' && !(curShapeRate > 0);
+			if (hide) shaperBtn.classList.add('tc-hidden');
+			else shaperBtn.classList.remove('tc-hidden');
+			var tip = SHAPER_TIP;
+			if (shaping === 'none') {
+				tip = _('Traffic shaping needs tc: install the trafficctl-shaper package.');
+			} else if (shaping === 'nohtb') {
+				tip = _('The HTB qdisc (kmod-sched-core) is not available: install the trafficctl-shaper package.');
+			} else if (shaping === 'download') {
+				tip = _('kmod-ifb is not installed: the shaper limits download only.');
+			}
+			shaperBtn.setAttribute('data-tip', tip);
+			if (hide && _modeSelected === 'shaper') modePick.setValue('limiter');
+		}
 		function getRateKbit() {
 			if (_rateSelected !== 'custom') return _rateSelected;
 			var n = parseFloat(customInput.value);
 			if (!n || n <= 0) return '0';
-			if (_customUnit === 'mbit') return String(Math.round(n * 1000));
-			return String(Math.round(n));
+			return String(Math.min(Math.round(_customUnit === 'mbit' ? n * 1000 : n), RPC_INT_MAX));
 		}
 
 		// Empty string means symmetric — never 0, which the backend would have
@@ -2610,7 +2843,7 @@ return view.extend({
 			if (upRow.classList.contains('tc-hidden')) return '';
 			var n = parseFloat(upInput.value);
 			if (!n || n <= 0) return '';
-			return String(_upUnit === 'mbit' ? Math.round(n * 1000) : Math.round(n));
+			return String(Math.min(Math.round(_upUnit === 'mbit' ? n * 1000 : n), RPC_INT_MAX));
 		}
 
 		// How the pending action is described. Naming one figure when the
@@ -2628,15 +2861,24 @@ return view.extend({
 			var name = '';
 			var kbit = getRateKbit();
 			var kbitUp = getRateKbitUp();
+			_upPinned = false;
 			// A block target has no single tc classid, so the shaper can't
 			// express it — force the limiter rather than silently doing nothing.
 			var mode = all ? 'limiter' : _modeSelected;
 			var scope = all ? _scopeSelected : '';
 
 			if (all && kbit !== '0') {
+				// One click here limits every device on the target, so it is
+				// asked first, in the same sentence the panel shows.
+				if (!window.confirm(scopeExplain.textContent + '\n\n' + _('Apply this limit now?'))) {
+					ratePick.setValue('0');
+					customRow.classList.add('tc-hidden');
+					_customPinned = false;
+					return;
+				}
 				setStatus(statusDiv, 'loading',
 					_('Limiting') + ' ' + ip + ' → ' + rateLabel(kbit, kbitUp) + ' (' + scope + ')…');
-				callRatelimit(ip, parseInt(kbit), name, scope, kbitUp ? parseInt(kbitUp) : null).then(function(res) {
+				callRatelimit(ip, parseInt(kbit), name, scope, kbitUp ? parseInt(kbitUp) : undefined).then(function(res) {
 					setStatus(statusDiv, (res && res.ok) ? 'action' : 'error', (res && res.msg) || '?');
 					runQuery();
 				}).catch(function(e) { setStatus(statusDiv, 'error', '✗ '+e.message); });
@@ -2653,18 +2895,26 @@ return view.extend({
 
 			if (kbit === '0') {
 				setStatus(statusDiv, 'loading', _('Removing throttle…'));
+				// Both are removed, whichever is set, and the message names
+				// what was there: "rate limit removed" after taking a shape off
+				// read as if the shape were still in place.
+				var dr = (self._devRate && self._devRate.ip === ip) ? self._devRate : {};
+				var hadShape = dr.shape > 0, hadLimit = dr.limit > 0;
 				Promise.all([
 					callRatelimit(ip, 0, name),
 					callShapeRemove(ip, name)
 				]).then(function(results) {
-					var res = results[0] || {};
-					setStatus(statusDiv, 'ok', res.msg || _('Throttle removed'));
+					var lim = results[0] || {}, shp = results[1] || {};
+					var msgs = [];
+					if (hadLimit || !hadShape) msgs.push(lim.msg);
+					if (hadShape) msgs.push(shp.msg);
+					setStatus(statusDiv, 'ok', msgs.filter(Boolean).join('; ') || _('Throttle removed'));
 					runQuery();
 				}).catch(function(e) { setStatus(statusDiv, 'error', '✗ '+e.message); });
 			} else if (mode === 'shaper') {
 				setStatus(statusDiv, 'loading', _('Shaping') + ' → ' + rateLabel(kbit, kbitUp) + '…');
 				callRatelimit(ip, 0, name)
-					.then(function() { return callShapeAdd(ip, parseInt(kbit), name, kbitUp ? parseInt(kbitUp) : null); })
+					.then(function() { return callShapeAdd(ip, parseInt(kbit), name, kbitUp ? parseInt(kbitUp) : undefined); })
 					.then(function(res) {
 						setStatus(statusDiv, (res && res.ok) ? 'action' : 'error', (res && res.msg) || '?');
 						runQuery();
@@ -2673,7 +2923,7 @@ return view.extend({
 			} else {
 				setStatus(statusDiv, 'loading', _('Limiting') + ' → ' + rateLabel(kbit, kbitUp) + '…');
 				callShapeRemove(ip, name)
-					.then(function() { return callRatelimit(ip, parseInt(kbit), name, '', kbitUp ? parseInt(kbitUp) : null); })
+					.then(function() { return callRatelimit(ip, parseInt(kbit), name, '', kbitUp ? parseInt(kbitUp) : undefined); })
 					.then(function(res) {
 						setStatus(statusDiv, (res && res.ok) ? 'action' : 'error', (res && res.msg) || '?');
 						runQuery();
@@ -2687,8 +2937,24 @@ return view.extend({
 
 		function isAllMode() { return searchSelect.getValue() === '__all__'; }
 
+		// Which target the rate chips were last set for. The panel is shared
+		// between the devices and the network-wide target, and the chips are
+		// synced from a device only by its poll: left as they were, a device's
+		// 10 Mbit/s showed as picked on the network-wide panel, read as a limit
+		// on every device, and a click there limits every device at once.
+		var _panelFor = null;
+
 		function updateModeUI() {
 			var all = isAllMode();
+			var target = searchSelect.getValue();
+			if (target !== _panelFor) {
+				_panelFor = target;
+				_customPinned = false;
+				customRow.classList.add('tc-hidden');
+				showUpRow(false);
+				_upPinned = false;
+				ratePick.setValue('0');
+			}
 			actionRow.classList.toggle('tc-hidden', all);
 			// The throttle panel used to be hidden in all-devices mode, which
 			// left no way to limit a subnet or the whole network at all.
@@ -2983,10 +3249,10 @@ return view.extend({
 						time: now
 					};
 
-					// Lifetime totals, accumulated by trafficctl-totals.sh.
-					// The proto fields arrive as -1 when the router cannot
-					// measure them (nft counters under flow offload), and that
-					// -1 is carried through untouched so the cell can say so
+					// Lifetime totals, accumulated by `trafficctl totals`.
+					// The proto fields arrive as -1 when the router has no
+					// split for them (a total from the old nft counter maps),
+					// and that -1 is carried through untouched so the cell can say so
 					// instead of printing a zero nobody can explain.
 					var tcpT = (d.bytes_tcp_total == null) ? -1 : Number(d.bytes_tcp_total);
 					var udpT = (d.bytes_udp_total == null) ? -1 : Number(d.bytes_udp_total);
@@ -3040,14 +3306,21 @@ return view.extend({
 		function runSingle(ip) {
 			var o = loadOpts();
 			var proto = (o.proto && o.proto !== 'all') ? o.proto : '';
-			self._queryGen++;
-			var gen = self._queryGen;
+			pollStart();
 
-			setStatus(statusDiv, 'loading', _('Running…'));
-
-			callDevice(ip, proto).then(function(data) {
+			Promise.all([
+				callDevice(ip, proto),
+				self._localNames.get(Date.now())
+			]).then(function(res) {
+				var data = res[0], local = res[1];
+				// The panel moved on while this was in flight: its rate
+				// belongs to a device no longer shown.
+				if (searchSelect.getValue() !== ip) {
+					pollEnd();
+					return;
+				}
 				if (!data || data.error) {
-					setStatus(statusDiv, 'error', (data && data.error) || _('Unknown error'));
+					pollEnd((data && data.error) || _('Unknown error'));
 					return;
 				}
 
@@ -3067,12 +3340,12 @@ return view.extend({
 						}
 					}
 					if ((data.shape_kbit || 0) > 0) {
-						parts.push(_('Shaped: <b style=\"color:var(--tc-speed)\">🌊 %s</b>').format(fmtRate(data.shape_kbit)));
+						parts.push(_('Shaped: <b style="color:var(--tc-speed)">🌊 %s</b>').format(fmtCeiling(data.shape_kbit, data.shape_kbit_up)));
 						var sm = self._shapeMap[data.ip || searchSelect.getValue()] || {};
-						if ((sm.backlog||0) > 0) parts.push(_('Queued: <b style=\"color:var(--tc-speed)\">%s</b>').format(fmtBytes(sm.backlog)));
+						if ((sm.backlog||0) > 0) parts.push(_('Queued: <b style="color:var(--tc-speed)">%s</b>').format(fmtBytes(sm.backlog)));
 						if ((sm.bytes||0) > 0) parts.push(_('Passed: <b>%s</b>').format(fmtBytes(sm.bytes)));
 					} else if ((data.rate_limit_kbit || 0) > 0) {
-						parts.push(_('Speed limit: <b style=\"color:var(--tc-warn)\">⚡ %s</b>').format(fmtRate(data.rate_limit_kbit)));
+						parts.push(_('Speed limit: <b style="color:var(--tc-warn)">⚡ %s</b>').format(fmtCeiling(data.rate_limit_kbit, data.rate_limit_kbit_up)));
 						var dm = self._dropMap[data.ip || searchSelect.getValue()] || {};
 						if ((dm.packets||0) > 0) {
 							parts.push(_('Dropped: <b style="color:var(--tc-err)">🚫 %d pkts / %s</b>').format(Number(dm.packets) || 0, fmtBytes(dm.bytes||0)));
@@ -3097,12 +3370,15 @@ return view.extend({
 				}
 
 				updateInetBtn(data.blocked);
-				updateWifiBtn(data.wifi_blocked, !!data.mac);
+				updateWifiBtn(data.wifi_blocked, !!data.mac, data.wifi_filter);
 
 				var curShapeRate = data.shape_kbit || 0;
 				var curLimitRate = data.rate_limit_kbit || 0;
+				// What Off will be taking away, for its message.
+				self._devRate = { ip: ip, shape: curShapeRate, limit: curLimitRate };
 				var curRate = curShapeRate > 0 ? curShapeRate : curLimitRate;
 				modePick.setValue(curShapeRate > 0 ? 'shaper' : (curLimitRate > 0 ? 'limiter' : 'shaper'));
+				updateShaperBtn(data.shaping, curShapeRate);
 
 				var curRateStr = String(curRate);
 				var matched = RATE_PRESETS.some(function(p) { return p.v === curRateStr; });
@@ -3121,6 +3397,19 @@ return view.extend({
 				} else {
 					ratePick.setValue('0');
 					customRow.classList.add('tc-hidden');
+				}
+
+				// Show the upload ceiling that is installed, so reopening a
+				// device with a split limit does not look symmetric.
+				var curUp = curShapeRate > 0 ? (data.shape_kbit_up || 0) : (data.rate_limit_kbit_up || 0);
+				if (!_upPinned && document.activeElement !== upInput) {
+					var split = curRate > 0 && curUp > 0 && curUp !== curRate;
+					showUpRow(split);
+					if (split) {
+						_upUnit = curUp % 1000 === 0 ? 'mbit' : 'kbit';
+						upInput.value = _upUnit === 'mbit' ? curUp / 1000 : curUp;
+						updateUpUnitBtns();
+					}
 				}
 
 				while (connsDiv.firstChild) connsDiv.removeChild(connsDiv.firstChild);
@@ -3148,7 +3437,7 @@ return view.extend({
 						connsDiv.appendChild(E('p',{'style':'color:var(--tc-faint);font-size:11px;margin-top:6px'},
 							groups.length + ' ' + _('groups from') + ' ' + data.connections.length + ' ' + _('connections') + '. ' + _('Click header to sort.')));
 					} else {
-						tbl = buildTable(data.connections, self._sortCol, self._sortDir, o.rdns, self._connHiddenCols);
+						tbl = buildTable(data.connections, self._sortCol, self._sortDir, o.rdns, self._connHiddenCols, local);
 						Array.prototype.forEach.call(tbl.querySelectorAll('.th'), function(th) {
 							th.addEventListener('click', function() {
 								var col = th.getAttribute('data-col');
@@ -3162,35 +3451,35 @@ return view.extend({
 							});
 						});
 						connsDiv.appendChild(E('div',{'style':'overflow-x:auto'},[tbl]));
-						connsDiv.appendChild(E('p',{'style':'color:var(--tc-faint);font-size:11px;margin-top:6px'},
-							data.connections.length + ' ' + _('connections') + '. ' + _('Click header to sort.')));
+						var hint = rdnsHint(!!o.rdns);
+						hint.querySelector('a').addEventListener('click', function(ev) {
+							ev.preventDefault();
+							var cb = rdnsCheck.querySelector('input');
+							rdnsCheck.scrollIntoView({ block: 'center' });
+							cb.focus();
+						});
+						connsDiv.appendChild(E('p',{'style':'color:var(--tc-faint);font-size:11px;margin-top:6px'}, [
+							data.connections.length + ' ' + _('connections') + '. ' + _('Click header to sort.'),
+							hint
+						]));
 
 						if (o.rdns) {
-							var seen = {}, uncached = [];
+							var seen = {}, dsts = [];
 							data.connections.forEach(function(c) {
 								var dst = c.dst || '';
-								if (!dst || seen[dst] || PRIVATE_RE.test(dst)) return;
+								if (!dst || seen[dst] || PRIVATE_RE.test(dst) || localName(local, dst)) return;
 								seen[dst] = true;
-								if (self._rdnsCache[dst] !== undefined) {
-									var cached = self._rdnsCache[dst];
-									Array.prototype.forEach.call(
-										connsDiv.querySelectorAll('[data-dst="'+dst+'"]'),
-										function(cell) {
-											if (cached) { cell.textContent = cached; cell.style.color = ''; }
-											else { cell.innerHTML = '<span class="tc-c-faint">—</span>'; }
-										}
-									);
-								} else {
-									uncached.push(dst);
-								}
+								dsts.push(dst);
+								var shown = rdnsShown(self._rdns, dst);
+								if (shown !== undefined) paintHost(dst, shown);
 							});
-							_rdnsBatch(uncached, gen);
+							_rdnsBatch(rdnsPick(self._rdns, dsts, Date.now()));
 						}
 					}
 				}
-				setStatus(statusDiv, 'ok', '✓ ' + _('Done'));
+				pollEnd();
 			})
-			.catch(function(e) { setStatus(statusDiv, 'error', '✗ '+e.message); });
+			.catch(function(e) { pollEnd(e.message); });
 		}
 
 		self._tableFilter = null;
@@ -3315,17 +3604,17 @@ return view.extend({
 				statsDiv.lastChild.addEventListener('click', function() { self._tableFilter = null; renderSummary(rows); });
 			}
 
-			// Says once, in words, what the ⚠ in every byte cell means. The
-			// Flow Offload banner above already explains the mode, but on this
-			// hardware its reassurance — that trafficctl switches to nftables
-			// counters — is exactly what does not hold.
+			// Says once, in words, what the ⚠ in every byte cell means, and
+			// what to do about it: on fw4 without a flowtable counter (22.03)
+			// no nft rule can count offloaded packets, so the fix is on the
+			// operator's side.
 			if (rows.some(function(r) { return r._total_degraded; })) {
 				statsDiv.appendChild(E('div', {
 					'style': 'margin-top:8px;padding:6px 8px;border-left:3px solid var(--tc-err);' +
 						'background:rgba(211,84,0,0.10);font-size:11px'
 				}, [
 					E('strong', {}, '⚠ ' + _('Byte totals unavailable on this router.')),
-					document.createTextNode(' ' + _('Flow offload is active and the kernel does not support the nftables counter maps trafficctl uses in that mode, so byte counters stop updating for offloaded connections. Speeds and totals would be far too low, so they are not shown. Disabling hardware offload in Settings → Flow Offload restores them.'))
+					document.createTextNode(' ' + _('Flow offload is active and the flowtable has no counter (firewall4 on OpenWrt 22.03), so byte counters stop updating for offloaded connections. Speeds and totals would be far too low, so they are not shown. Turn flow offloading off in Settings → Flow Offload, or upgrade to OpenWrt 23.05 or later, to restore them.'))
 				]));
 			}
 
@@ -3368,7 +3657,7 @@ return view.extend({
 		}
 
 		function runAll() {
-			setStatus(statusDiv, 'loading', _('Scanning all devices…'));
+			pollStart();
 
 			callTrafficctl().then(function(rows) {
 				if (!Array.isArray(rows)) rows = [];
@@ -3385,10 +3674,10 @@ return view.extend({
 						netifyMap = m;
 					}).catch(function() {});
 				}
-				setStatus(statusDiv, 'ok', '✓ ' + _('Done'));
+				pollEnd();
 				self._startBytesPoll();
 			})
-			.catch(function(e) { setStatus(statusDiv, 'error', '✗ '+e.message); });
+			.catch(function(e) { pollEnd(e.message); });
 		}
 
 		function updateExtendedStats() {
@@ -3405,6 +3694,11 @@ return view.extend({
 
 		function runQuery() {
 			var ip = searchSelect.getValue();
+			// The poll used to wipe the status line on every tick, which also
+			// disposed of a result belonging to the device just left. Now that
+			// it does not, switching devices has to do it — otherwise
+			// "Limiting 192.168.0.50…" lingers over another device's page.
+			if (self._statusIp !== ip) { clearStatus(statusDiv); self._statusIp = ip; }
 			var o = loadOpts(); o.lastIp = ip; saveOpts(o);
 			updateUrlParams(o);
 			updateModeUI();
@@ -3464,12 +3758,21 @@ return view.extend({
 			var action = inetBtn._action;
 			var fn = action === 'block' ? callBlock : callUnblock;
 			fn(ip, '').then(function(res) {
-				// A block without a known MAC covers IPv4 only, and the backend
-				// says so in msg. Swallowing it here would put the UI back to
-				// reporting a block that does not block (issue #67).
-				if (res && res.ipv6 === false) {
-					setStatus(statusDiv, 'error', (res && res.msg) || '?');
+				// The result is shown whatever it says, like every other action.
+				// Reporting it only when res.ipv6 === false discarded the rest
+				// of what the backend qualifies: "NOT PERSISTENT" (#105) and the
+				// NSS note (#81) are appended to msg on a SUCCESSFUL block, so
+				// blocking a device — the one path that mattered to the reporter
+				// of #105 — said nothing at all.
+				var state;
+				if (!res || !res.ok || res.ipv6 === false) {
+					// A failure, or a block that does not block over v6 (#67).
+					state = 'error';
+				} else {
+					// The device is now cut off, so not green.
+					state = (action === 'block') ? 'action' : 'ok';
 				}
+				setStatus(statusDiv, state, (res && res.msg) || '?');
 				runQuery();
 			}).catch(function(e) {
 				setStatus(statusDiv, 'error', e.message);
@@ -3732,7 +4035,7 @@ return view.extend({
 		callVersion().then(function(res) {
 			var el = document.getElementById('tc-version-footer');
 			if (el && res && res.version) {
-				el.textContent = 'trafficctl v' + res.version + ' (' + TRAFFICCTL_BUILD + ')';
+				el.textContent = 'trafficctl v' + res.version;
 			}
 		});
 
@@ -3799,10 +4102,10 @@ return view.extend({
 					para(bold(_('How to get full functionality without disabling offload:'))),
 					para([_('The flowtable') + ' ',
 						E('code', {}, 'counter'),
-						' ' + _('flag (Linux 5.7+, set automatically by fw4/nftables) periodically syncs ' +
+						' ' + _('flag (Linux 5.7+) periodically syncs ' +
 						  'hardware byte counts back to conntrack — trafficctl detects this and all features work normally.')]),
-					para(_('If your current firmware uses fw3 (iptables) or ships a kernel older than 5.7, ' +
-						  'a router with modern OpenWrt and fw4 support will have this working out of the box.')),
+					para(_('firewall4 on OpenWrt 22.03 does not set this flag; from 23.05 on it does, ' +
+						  'so upgrading the firmware restores full functionality.')),
 					docLinks,
 				]);
 			} else if (mode === 'software-counter') {
@@ -3810,11 +4113,9 @@ return view.extend({
 				// accurate graphs, which is why this was cosmetic rather than
 				// misleading — but it is a different mechanism, and the
 				// counter flag is exactly the detail someone opens this banner
-				// to understand. Saying "measured via nftables counters" here
-				// describes a path that is NOT producing the numbers on this
-				// router: with the flag set, the flowtable syncs offloaded
-				// byte counts back to conntrack and tctl_pick_byte_source
-				// stays on conntrack.
+				// to understand: with the flag set, the flowtable syncs
+				// offloaded byte counts back to conntrack, which is why the
+				// numbers are accurate here and frozen in plain 'software'.
 				bg     = 'rgba(243,156,18,0.10)';
 				border = '#f39c12';
 				icon   = 'ℹ️';
@@ -3826,7 +4127,7 @@ return view.extend({
 						E('code', {}, 'counter'),
 						' ' + _('flag (Linux 5.7+, set automatically by fw4), so offloaded byte counts are ' +
 						  'synced back to conntrack. Speed and totals come from conntrack as usual and ' +
-						  'are accurate — the nftables counter fallback is not needed on this router.')]),
+						  'are accurate.')]),
 					para(_('Traffic shaping and blocking are not affected.')),
 					docLinks,
 				]);
@@ -3838,8 +4139,15 @@ return view.extend({
 					para(bold(_('Software flow offloading is active.'))),
 					para(_('The kernel fast-paths established connections through a flowtable, ' +
 						  'bypassing conntrack byte updates for higher throughput.')),
-					para(_('Speed is measured via nftables counters installed at a higher priority ' +
-						  '(before the flowtable), so graphs are accurate.')),
+					para([_('The flowtable has no') + ' ',
+						E('code', {}, 'counter'),
+						' ' + _('flag (firewall4 on OpenWrt 22.03 does not set one), so offloaded connections ' +
+						  'are not counted at all: per-device speeds and totals are not shown.')]),
+					para(bold(_('To restore speed monitoring:'))),
+					E('ul', {'class': 'tc-offload-ul'}, [
+						E('li', {}, _('Disable flow offload in LuCI → Network → Firewall → General Settings.')),
+						E('li', {}, _('Or upgrade to OpenWrt 23.05 or later, whose firewall4 sets the flag.')),
+					]),
 					para(_('Traffic shaping and blocking are not affected.')),
 					docLinks,
 				]);
@@ -3968,7 +4276,7 @@ return view.extend({
 				cutPanel.appendChild(E('div', {'class': 'tc-cut__row'}, [
 					E('span', {'class': 'tc-cut__icon'}, '⊘'),
 					E('span', {'class': 'tc-c-muted'},
-						_('Global internet cut needs nftables (fw4). This router is running iptables.'))
+						_('Global internet cut needs nftables (fw4), and nft cannot list its tables on this router.'))
 				]));
 				return;
 			}
@@ -4113,7 +4421,7 @@ return view.extend({
 				offloadBanner,
 				cutPanel,
 				E('div', {'style':'margin-bottom:10px'}, [
-						E('div', {'style':'display:flex;align-items:center;gap:10px;flex-wrap:wrap'}, [searchSelect.el, actionRow]),
+						E('div', {'style':'display:flex;align-items:center;gap:10px;flex-wrap:wrap'}, [searchSelect.el, actionRow, pollSpinner]),
 						quickBar
 					]),
 				statusDiv,
@@ -4127,7 +4435,7 @@ return view.extend({
 				activityDiv
 			]),
 			E('div', {'id':'tc-version-footer','class':'tc-version-footer'},
-				'trafficctl (' + TRAFFICCTL_BUILD + ')')
+				'trafficctl')
 		]);
 	},
 

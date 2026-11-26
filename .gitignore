@@ -54,7 +54,6 @@
 /v2ray-core
 /v2ray-geodata
 /k3screenctrl
-/v2raya
 /simpleproxy
 /speedtestc
 /srelay
@@ -65,3 +64,8 @@
 /fibocom_MHI
 /*zabbix*
 /scripts
+/pcat-manager
+/doc
+/docs
+/fonts
+/images

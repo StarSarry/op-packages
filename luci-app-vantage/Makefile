@@ -10,23 +10,31 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-vantage
-PKG_VERSION:=1.0.9
-PKG_RELEASE:=16
+PKG_VERSION:=1.2.1
+PKG_RELEASE:=43
 PKG_LICENSE:=GPL-3.0-or-later
 
 LUCI_TITLE:=Vantage dashboard
 LUCI_DESCRIPTION:=Live network dashboard (landing page under admin/dashboard): device, \
 	uplink, radios, SSIDs and stations with health and experience scores. \
-	Read-only except for station names, which are kept in /etc/config/vantage.
-# rpcd-mod-iwinfo provides the station lists (iwinfo info/assoclist).
+	Read-only except for station names and stations set not to warn about \
+	their signal, which are kept in /etc/config/vantage.
+# rpcd-mod-iwinfo provides the station lists and the radios' state
+# (iwinfo info/assoclist).
 # rpcd-mod-ucode runs the app's plugin (/usr/share/rpcd/ucode/luci.vantage:
-# key-free wireless status, validated alias writes), which imports the uci
-# and ubus ucode modules; luci-base pulls all three in already, they are
-# listed because the plugin needs them.
+# key-free wireless status, thermal zones, validated alias writes), which
+# imports the uci, ubus and fs ucode modules; luci-base pulls all four in
+# already, they are listed because the plugin needs them. It also imports
+# rtnl (the bridges' hosts, the default routes) and nl80211: it reads the
+# radios' channel survey (the noise floor) through nl80211 itself, because
+# rpcd's iwinfo survey crashes rpcd on drivers other than nl80211's (#124).
+# Wi-Fi images already have both, as wifi-scripts needs them.
 # Optional at runtime, degrade when absent: rpcd-mod-rrdns (reverse DNS
 # names), umdns (mDNS names), hostapd ubus objects (WPS names, client
-# capabilities).
-LUCI_DEPENDS:=+luci-base +rpcd +rpcd-mod-iwinfo +rpcd-mod-ucode +ucode-mod-uci +ucode-mod-ubus
+# capabilities), ethtool (a DSA switch's own port counters, #156: the
+# executable rpcd plugin /usr/libexec/rpcd/luci.vantage.ports runs
+# /usr/sbin/ethtool -S on each DSA port, and nothing without it).
+LUCI_DEPENDS:=+luci-base +rpcd +rpcd-mod-iwinfo +rpcd-mod-ucode +ucode-mod-uci +ucode-mod-ubus +ucode-mod-fs +ucode-mod-rtnl +ucode-mod-nl80211
 LUCI_PKGARCH:=all
 LUCI_MAINTAINER:=anothaDev <10740588+anothaDev@users.noreply.github.com>
 LUCI_URL:=https://github.com/anothaDev/luci-theme-vantage

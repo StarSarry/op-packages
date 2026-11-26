@@ -50,12 +50,12 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=wwand
-PKG_VERSION:=1.8.0_pre14
-PKG_RELEASE:=82
+PKG_VERSION:=1.10.0_pre35
+PKG_RELEASE:=105
 
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/ddimension/wwand.git
-PKG_SOURCE_VERSION:=7c6f90d468a76060da225e0a2a60101b74d83bc5
+PKG_SOURCE_VERSION:=748ee4a3ca8a40ac9a4b9ab02a0eff71e098da69
 PKG_MIRROR_HASH:=skip
 
 PKG_LICENSE:=GPL-2.0-only
@@ -96,16 +96,17 @@ UCDIR:=/usr/share/ucode/wwand
 # silently ship in the base too. The per-backend install lists below carry the
 # QMI/MBIM/NCM/eSIM modules; main.uc/wwandctl.uc install as executables.
 WWAND_BASE_UC:=apndb.uc atcmd.uc atcmd_parse.uc atport.uc backend.uc board.uc \
-	carrier_config.uc client.uc config.uc config_check.uc context_common.uc \
+	carrier_config.uc cbs.uc cell_lock.uc client.uc config.uc config_check.uc context_common.uc \
 	context_monitor_qmi.uc ctx_settings.uc daemon.uc deps.uc discovery.uc \
+	fcc_fibocom.uc \
 	hwops.uc log.uc modem_common.uc modem_datapath_qmi.uc modem_init_qmi.uc plugins.uc \
 	modem_quirks.uc modeswitch.uc ncm_vendors.uc netlink.uc netsel_ops.uc \
 	protocol_switch.uc reconnect.uc recovery.uc regdetail.uc sim.uc sim_plmn.uc \
-	simops.uc siminventory.uc sms.uc sms_pdu.uc telemetry_mbim.uc telemetry_ncm.uc \
-	telemetry_qmi.uc transport.uc ubus.uc version.uc wwandctl_fmt.uc
+	simops.uc siminventory.uc sms.uc sms_pdu.uc sms_rx.uc steering.uc telemetry_mbim.uc telemetry_ncm.uc \
+	telemetry_qmi.uc transport.uc ubus.uc ussd.uc version.uc wwandctl_fmt.uc
 WWAND_BASE_CODEC:=arfcn_bands.uc hex.uc qmux.uc tlv.uc
 WWAND_BASE_SCHEMA:=cat.uc ctl.uc dms.uc dsd.uc merge.uc nas.uc pdc.uc rat.uc \
-	tmd.uc uim.uc wda.uc wds.uc wms.uc wms_lazy.uc
+	tmd.uc uim.uc voice.uc voice_lazy.uc wda.uc wds.uc wms.uc wms_lazy.uc
 
 # DEVELOPERS: set CONFIG_WWAND_UCODE_SOURCE to ship readable .uc source
 # instead of bytecode — for editing modules live under /usr/share/ucode/wwand
@@ -152,16 +153,32 @@ endef
 # SDK (`feeds update` puts it under feeds/base and links package/feeds/base).
 # Not found (an unusual tree) means no floor, as before — never a guess.
 #
-# Deliberately NOT +libucode by name, though that would record the
-# ABI-versioned libucode<abi>: on a later ucode upgrade it keeps the old
-# library installed, and wwand_io.so then loads it into an interpreter running
-# the new one — two libucode ABIs in one process. Without it the library goes
-# and files/wwand.init says why the daemon cannot start.
+# The same floor on libucode<abi>, because the VM that loads the bytecode is
+# the LIBRARY, and `ucode (>=)` does not move it: `ucode` depends on
+# libucode<abi> without a version, so apk upgrades the binary and leaves the
+# old library. That is how a 25.12.6 box got wwand 1.10.0_pre0 with ucode
+# 2026.07.09 over libucode20230711 2026.01.16 and failed with "Bytecode
+# version mismatch, got 0x02, expected 0x01" (ddimension/wwand#92, reproduced
+# in the 25.12.6 rootfs, 2026-11-19). The floor has to name the ABI package:
+# libucode<abi> provides the bare `libucode` WITHOUT a version, so apk cannot
+# satisfy `libucode>=…` at all (same rootfs). OpenWrt's FormatDepends would
+# add the suffix itself, but only from $(STAGING_DIR)/pkginfo/libucode.version
+# (include/feeds.mk GetABISuffix), so the ABI is read from ucode's Makefile
+# like the date.
+#
+# The cost, accepted: after an ABI change in ucode, a wwand built against the
+# old ABI keeps libucode<old> installed until wwand is rebuilt, and wwand_io.so
+# (NEEDED libucode.so.<old>) then loads it next to the interpreter's
+# libucode.so.<new>. Without the floor the old library goes and wwand.init
+# explains the start failure instead. The floor wins because the case it fixes
+# happens on every point release of a branch whose ucode moves, the other one
+# only while the feed lags an ABI change.
 UCODE_MAKEFILE:=$(firstword $(wildcard \
 	$(TOPDIR)/package/utils/ucode/Makefile \
 	$(TOPDIR)/package/feeds/base/ucode/Makefile \
 	$(TOPDIR)/feeds/base/package/utils/ucode/Makefile))
 UCODE_BUILT:=$(if $(UCODE_MAKEFILE),$(subst -,.,$(shell sed -n 's/^PKG_SOURCE_DATE:=//p' '$(UCODE_MAKEFILE)')))
+UCODE_ABI:=$(if $(UCODE_MAKEFILE),$(shell sed -n 's/^PKG_ABI_VERSION:=//p' '$(UCODE_MAKEFILE)'))
 
 # ---------------------------------------------------------------------------
 # base: daemon + framework + codec/client + shared core. No backend on its own;
@@ -178,7 +195,7 @@ define Package/wwand
   # wwand-private, always version-locked to the ucode side). PROVIDES keeps
   # configs/upgrades from the era of the separate ucode-mod-wwand-io working.
   PROVIDES:=ucode-mod-wwand-io
-  EXTRA_DEPENDS:=$(if $(UCODE_BUILT),ucode (>=$(UCODE_BUILT)))
+  EXTRA_DEPENDS:=$(if $(UCODE_BUILT),ucode (>=$(UCODE_BUILT))$(if $(UCODE_ABI),$(comma) libucode$(UCODE_ABI) (>=$(UCODE_BUILT))))
 endef
 
 define Package/wwand/description
@@ -386,7 +403,9 @@ define Package/wwand-mbim
   # conditional for the same reason as wwand-qmi: the ucode side is
   # transport-neutral, and on MHI the transport is kmod-mhi-wwan-mbim, which
   # wwand-mhi already pulls
-  DEPENDS:=+wwand-qmi +USB_SUPPORT:kmod-usb-net-cdc-mbim
+  # +ucode-mod-digest: the Fibocom FM350 FCC unlock (fcc_fibocom.uc) hashes the
+  # GTFCCLOCK challenge with sha256, injected from here (modem_mbim.uc)
+  DEPENDS:=+wwand-qmi +ucode-mod-digest +USB_SUPPORT:kmod-usb-net-cdc-mbim
   # coexists with the stock OpenWrt MBIM stack (netifd `mbim` proto, package
   # umbim): wwand manages a cdc_mbim modem only once its interface has been
   # migrated to `proto wwand` (LuCI modem list / migrate CLI), so both stacks can
@@ -412,7 +431,18 @@ define Package/wwand-mbim/install
 	$(INSTALL_DATA) $(WWAND_UCODE)/atcmd_mbim.uc $(1)$(UCDIR)/
 	$(INSTALL_DATA) $(WWAND_UCODE)/atcmd_mbim_lazy.uc $(1)$(UCDIR)/
 	$(INSTALL_DATA) $(WWAND_UCODE)/codec/mbim.uc $(1)$(UCDIR)/codec/
-	$(INSTALL_DATA) $(WWAND_UCODE)/codec/mbim_schema/*.uc $(1)$(UCDIR)/codec/mbim_schema/
+	# The service schemas by name, like every other module here. They are
+	# loaded by name at run time (wwand.codec.mbim_schema.<service>), so one
+	# missing from this list is an import failure on a live modem — which is
+	# what tools/check-packaging.py in the wwand tree is run for at every
+	# version bump.
+	$(INSTALL_DATA) $(WWAND_UCODE)/codec/mbim_schema/basic_connect.uc $(1)$(UCDIR)/codec/mbim_schema/
+	$(INSTALL_DATA) $(WWAND_UCODE)/codec/mbim_schema/compal.uc $(1)$(UCDIR)/codec/mbim_schema/
+	$(INSTALL_DATA) $(WWAND_UCODE)/codec/mbim_schema/fibocom.uc $(1)$(UCDIR)/codec/mbim_schema/
+	$(INSTALL_DATA) $(WWAND_UCODE)/codec/mbim_schema/ms_basic_connect_ext.uc $(1)$(UCDIR)/codec/mbim_schema/
+	$(INSTALL_DATA) $(WWAND_UCODE)/codec/mbim_schema/ms_voice_ext.uc $(1)$(UCDIR)/codec/mbim_schema/
+	$(INSTALL_DATA) $(WWAND_UCODE)/codec/mbim_schema/qmi_passthrough.uc $(1)$(UCDIR)/codec/mbim_schema/
+	$(INSTALL_DATA) $(WWAND_UCODE)/codec/mbim_schema/quectel.uc $(1)$(UCDIR)/codec/mbim_schema/
 endef
 
 # ---------------------------------------------------------------------------
@@ -476,9 +506,11 @@ endef
 define Package/wwand-mhi/description
   Support for cellular modems attached over PCIe/MHI (Foxconn T99W175 and
   similar), whose control ports appear on the kernel wwan subsystem. Pulls the
-  MHI bus/PCI/control/data drivers and installs the wwan-subsystem hotplug so
-  wwand binds these modems on boot. Install together with a control backend
-  (wwand-qmi or wwand-mbim).
+  MHI bus/PCI/control/data drivers and installs the wwan-subsystem hotplug.
+  Install together with a control backend (wwand-qmi or wwand-mbim).
+
+  For a modem that uses QMI over QRTR, install wwand-qrtr and set
+  option device 'qrtr' in the modem configuration.
 
   Adding wwand-mbim is worth weighing on a QMI-driven MHI modem: many of them
   expose no DUN channel and therefore no AT port at all, and wwand can then
@@ -497,6 +529,26 @@ define Package/wwand-mhi/install
 	# not with the base package.
 	$(INSTALL_DIR) $(1)/etc/hotplug.d/wwan
 	$(INSTALL_DATA) $(PKG_BUILD_DIR)/files/wwand.hotplug.wwan $(1)/etc/hotplug.d/wwan/20-wwand
+endef
+
+# ---------------------------------------------------------------------------
+# wwand-qrtr: opt-in QMI over the QRTR transport on PCIe/MHI.
+# ---------------------------------------------------------------------------
+define Package/wwand-qrtr
+  SECTION:=net
+  CATEGORY:=Network
+  SUBMENU:=WWAN
+  TITLE:=QMI over QRTR for wwand
+  DEPENDS:=+wwand-qmi +wwand-mhi +kmod-qrtr-mhi
+endef
+
+define Package/wwand-qrtr/description
+  Installs the QMI backend and QRTR driver for PCIe/MHI modems that use
+  QMI over QRTR. Set option device 'qrtr' in the modem configuration.
+endef
+
+define Package/wwand-qrtr/install
+	true
 endef
 
 # ---------------------------------------------------------------------------
@@ -707,6 +759,7 @@ $(eval $(call BuildPackage,wwand-qmi))
 $(eval $(call BuildPackage,wwand-mbim))
 $(eval $(call BuildPackage,wwand-ncm))
 $(eval $(call BuildPackage,wwand-mhi))
+$(eval $(call BuildPackage,wwand-qrtr))
 $(eval $(call BuildPackage,wwand-esim))
 $(eval $(call BuildPackage,wwand-gps))
 $(eval $(call BuildPackage,wwand-apntest))

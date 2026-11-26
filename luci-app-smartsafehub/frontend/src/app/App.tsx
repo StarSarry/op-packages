@@ -1,15 +1,19 @@
 import type { ComponentChildren } from 'preact';
-import { useEffect } from 'preact/hooks';
+import { useEffect, useRef } from 'preact/hooks';
 
-import { fetchGuestWifiQr, fetchRecommendedRulesStatus, refreshRecommendedRulesStatus,
+import { fetchActivityHistory, fetchAppsCatalog, fetchAppsStatus, fetchAppsMetrics, refreshAppsCatalog, refreshAppsStatus, refreshAppsMetrics, installVerifiedApp, repairVerifiedApp, updateVerifiedApp, removeVerifiedApp, fetchGuestWifiQr, fetchRecommendedRulesStatus, refreshRecommendedRulesStatus,
   revokeRecommendedRule, fetchWifiQr, initializeSystemTimezone } from '../api/smartsafehub';
 
 import { AppShell } from '../components/AppShell';
 import { PageTabs } from '../components/PageTabs';
 import { useActivityHistory } from '../hooks/useActivityHistory';
+import { useAsyncResource } from '../hooks/useAsyncResource';
+import type { AppsCatalog, AppsInstallStatus, AppsMetrics } from '../types/apps';
 import { useConfigurationBackup } from '../hooks/useConfigurationBackup';
 import { useConnectedDevices } from '../hooks/useConnectedDevices';
 import { useFirmwareUpdates } from '../hooks/useFirmwareUpdates';
+import { useFeaturedSensor } from '../hooks/useFeaturedSensor';
+import { assessJarbisCompatibility } from '../utils/jarbisCompatibility';
 import { useHashRoute } from '../hooks/useHashRoute';
 import { usePageTabs } from '../hooks/usePageTabs';
 import { useHealth } from '../hooks/useHealth';
@@ -29,6 +33,7 @@ import { useDeviceRegistration } from '../hooks/useDeviceRegistration';
 import { useDashboardAccountStatus } from '../hooks/useDashboardAccountStatus';
 import { useWifi } from '../hooks/useWifi';
 import { ActivityPage } from '../pages/ActivityPage';
+import { AppsPage } from '../pages/AppsPage';
 import { ConnectedDevicesPage } from '../pages/ConnectedDevicesPage';
 import { HomePage } from '../pages/HomePage';
 import { IptvPage } from '../pages/IptvPage';
@@ -41,6 +46,15 @@ import { SmartSafeHubAccountPage } from '../pages/SmartSafeHubAccountPage';
 import { UpdatePage } from '../pages/UpdatePage';
 import { WifiPage } from '../pages/WifiPage';
 import { browserTimezone } from '../utils/timezone';
+import { fetchNetwatchStatus, updateNetwatchEnabled } from '../api/netwatch';
+import type { NetwatchStatus } from '../types/netwatch';
+import type { ActivityHistory } from '../types/activity';
+import { NetworkWatchPage } from '../pages/NetworkWatchPage';
+import { SmartHomePage } from '../pages/SmartHomePage';
+import * as jarbisApi from '../api/jarbis';
+import type { JarbisCandidate, JarbisDevice, JarbisStatus } from '../types/jarbis';
+
+const { getJarbisStatus, getJarbisDevices, getJarbisCandidates } = jarbisApi;
 
 interface AppProps {
   onAdministratorPasswordChanged: () => void;
@@ -51,6 +65,61 @@ export function App({ onAdministratorPasswordChanged }: AppProps) {
   const tabs = usePageTabs();
   const configurationBackup = useConfigurationBackup();
   const activity = useActivityHistory(route === 'activity');
+  // Keep Smart Home snapshots across route changes, just as SafeShield/rules
+  // do. Separate resources avoid a slow discovery RPC holding back the bulbs.
+  const jarbisStatus = useAsyncResource<JarbisStatus>({
+    active: route === 'smarthome',
+    fallbackError: '스마트홈 서비스 상태를 확인하지 못했습니다.',
+    loader: getJarbisStatus,
+    staleTimeMs: 15_000,
+  });
+  const jarbisDevices = useAsyncResource<{ devices: JarbisDevice[] }>({
+    active: true, // One small list fetch; no polling or sensor RPC when no sensor exists.
+    fallbackError: '등록된 전구를 불러오지 못했습니다.',
+    loader: getJarbisDevices,
+    staleTimeMs: 15_000,
+  });
+  const jarbisNeedsUpgrade = route === 'smarthome' && assessJarbisCompatibility(jarbisStatus.data).needsUpgrade;
+  const featuredSensor = useFeaturedSensor(jarbisDevices.data?.devices ?? null, route === 'smarthome');
+  // The header performs only one initial list fetch. Re-entering Smart Home
+  // explicitly refreshes the list so newly installed Jarbis, deleted devices
+  // and external registrations are reflected without a global polling timer.
+  const previousSmartHomeRoute = useRef(route);
+  useEffect(() => {
+    if (route === 'smarthome' && previousSmartHomeRoute.current !== 'smarthome') {
+      void jarbisStatus.refresh();
+      void jarbisDevices.refresh();
+    }
+    previousSmartHomeRoute.current = route;
+  }, [route]);
+  const jarbisCandidates = useAsyncResource<{ devices: JarbisCandidate[] }>({
+    active: route === 'smarthome',
+    fallbackError: '검색된 전구를 불러오지 못했습니다.',
+    loader: getJarbisCandidates,
+    staleTimeMs: 30_000,
+  });
+  const apps = useAsyncResource<AppsCatalog>({
+    active: route === 'apps' || (route === 'smarthome' && !jarbisStatus.data && Boolean(jarbisStatus.error)) || jarbisNeedsUpgrade,
+    fallbackError: '검증된 앱 목록을 불러오지 못했습니다.',
+    loader: fetchAppsCatalog,
+    pollInterval: (data) => jarbisNeedsUpgrade ? null : data?.refreshing ? 2_000 : !data?.ready ? (data?.refreshFailed ? 15_000 : 2_000) : 60_000,
+    staleTimeMs: 2_000,
+  });
+  const appsStatus = useAsyncResource<AppsInstallStatus>({
+    active: route === 'apps' || (route === 'smarthome' && !jarbisStatus.data && Boolean(jarbisStatus.error)) || jarbisNeedsUpgrade,
+    fallbackError: '앱 설치 상태를 불러오지 못했습니다.',
+    loader: fetchAppsStatus,
+    pollInterval: (data) => jarbisNeedsUpgrade ? null : !data?.ready || data?.refreshing ? 2_000 : data?.job.phase === 'running' || data?.job.phase === 'starting' || data?.restore?.phase === 'running' || data?.restore?.phase === 'starting' ? 3000 : 12000,
+    staleTimeMs: 3000,
+  });
+  // Optional metrics never participate in the status/error guard for buttons.
+  const appsMetrics = useAsyncResource<AppsMetrics>({
+    active: route === 'apps',
+    fallbackError: '저장 공간 정보를 확인하지 못했습니다.',
+    loader: fetchAppsMetrics,
+    pollInterval: (data) => data?.refreshing || !data?.ready ? 3_000 : 60000,
+    staleTimeMs: 5000,
+  });
   const status = useStatus(route === 'home' || route === 'settings');
   const updates = useSoftwareUpdates(true);
   const firmware = useFirmwareUpdates(true);
@@ -58,8 +127,24 @@ export function App({ onAdministratorPasswordChanged }: AppProps) {
   const lan = useLan(route === 'home' || route === 'network');
   const iptv = useIptv(route === 'iptv');
   const wifi = useWifi(route === 'wifi');
+  const netwatch = useAsyncResource<NetwatchStatus>({
+    active: route === 'netwatch',
+    fallbackError: 'Network Watch 상태를 읽을 수 없습니다.',
+    loader: fetchNetwatchStatus,
+    pollInterval: 60000,
+    staleTimeMs: 5000,
+  });
   const dashboardDevices = useConnectedDevices(route === 'home', false);
-  const devices = useConnectedDevices(route === 'devices');
+  // Network Watch reuses the device lookup once on entry; 15s polling stays on Devices only.
+  const devices = useConnectedDevices(route === 'devices' || route === 'netwatch', route === 'devices');
+  // Read existing activity events only while Network Watch is visible.
+  const netwatchActivity = useAsyncResource<ActivityHistory>({
+    active: route === 'netwatch',
+    fallbackError: 'Network Watch 최근 이벤트를 확인할 수 없습니다.',
+    loader: fetchActivityHistory,
+    pollInterval: 60_000,
+    staleTimeMs: 5_000,
+  });
   // Both views consume the same resource: switching pages must not re-query RPC.
   const safeshield = useSafeShieldStatus(route === 'home' || route === 'safeshield');
   const safeshieldStatistics = useSafeShieldStatistics(route === 'home' || route === 'safeshield', route === 'safeshield');
@@ -95,6 +180,23 @@ export function App({ onAdministratorPasswordChanged }: AppProps) {
       });
   }, []);
 
+  // A completed install/remove invalidates both APK snapshots even if their
+  // background TTL has not elapsed. Never force them on every render/poll.
+  const appsJobId = appsStatus.data?.job.operationId;
+  const appsJobPhase = appsStatus.data?.job.phase;
+  const appsRestorePhase = appsStatus.data?.restore?.phase;
+  const previousAppsRefreshKey = useRef('');
+  useEffect(() => {
+    if (route !== 'apps' || (appsJobPhase !== 'success' && appsRestorePhase !== 'success')) return;
+    const key = `${appsJobId ?? ''}:${appsJobPhase}:${appsRestorePhase ?? ''}`;
+    if (key === previousAppsRefreshKey.current) return;
+    previousAppsRefreshKey.current = key;
+    void Promise.allSettled([refreshAppsStatus(), refreshAppsMetrics()]).then(() => {
+      void appsStatus.refresh();
+      void appsMetrics.refresh();
+    });
+  }, [route, appsJobId, appsJobPhase, appsRestorePhase]);
+
   const safeshieldActions = useSafeShieldActions(
     safeshield.refresh,
     safeshieldStatistics.refresh,
@@ -103,7 +205,9 @@ export function App({ onAdministratorPasswordChanged }: AppProps) {
   const current =
     route === 'activity'
       ? activity
-      : route === 'network'
+      : route === 'netwatch'
+        ? netwatch
+        : route === 'network'
         ? wan
         : route === 'wifi'
           ? wifi
@@ -117,13 +221,76 @@ export function App({ onAdministratorPasswordChanged }: AppProps) {
                   ? rules
                   : route === 'account'
                     ? deviceRegistration
-                    : route === 'system'
-                      ? updates
-                      : status;
+                    : route === 'apps'
+                      ? apps
+                      : route === 'system'
+                        ? updates
+                        : status;
 
   let content: ComponentChildren;
 
   switch (route) {
+    case 'smarthome':
+      content = <SmartHomePage statusResource={jarbisStatus}
+        featuredSensorId={featuredSensor.selectedId}
+        onFeaturedSensorChange={featuredSensor.select}
+        onSensorReading={featuredSensor.acceptReading}
+        devicesResource={jarbisDevices} candidatesResource={jarbisCandidates} operations={jarbisApi}
+        appsStatus={appsStatus.data} appsCatalog={apps.data}
+        appsStatusError={appsStatus.error} appsCatalogError={apps.error}
+        onCheckInstallation={() => { void Promise.all([jarbisStatus.refresh(), appsStatus.refresh(), apps.refresh()]); }} />;
+      break;
+
+    case 'netwatch':
+      content = (
+        <NetworkWatchPage
+          data={netwatch.data}
+          devices={devices.data}
+          activity={netwatchActivity.data}
+          error={netwatch.error}
+          loading={netwatch.loading}
+          onRetry={() => void netwatch.refresh()}
+          onSetEnabled={async (enabled) => {
+            await updateNetwatchEnabled(enabled);
+            await netwatch.refresh();
+          }}
+        />
+      );
+      break;
+
+    case 'apps':
+      content = (
+        <AppsPage
+          data={apps.data?.ready === false ? null : apps.data}
+          error={apps.error ?? (apps.data?.refreshFailed && !apps.data?.ready ? '앱 목록 갱신에 실패했습니다. 서버 연결을 확인해 주세요.' : null)}
+          loading={apps.loading || (!!apps.data && !apps.data.ready && !apps.data.refreshFailed)}
+          refreshing={apps.refreshing || !!apps.data?.refreshing}
+          onRetry={() => void refreshAppsCatalog().then(() => apps.refresh()).then(() =>
+            Promise.all([appsStatus.refresh(), appsMetrics.refresh()])).catch(() => apps.refresh())}
+          installStatus={appsStatus.data?.ready === false ? null : appsStatus.data}
+          metrics={appsMetrics.data}
+          statusError={appsStatus.error ?? (appsStatus.data?.ready === false ? '설치 상태를 확인하고 있습니다.' : null)}
+          onRefreshStatus={() => void appsStatus.refresh()}
+          onInstall={async (id) => {
+            await installVerifiedApp(id);
+            await appsStatus.refresh();
+          }}
+          onRepair={async (id) => {
+            await repairVerifiedApp(id);
+            await appsStatus.refresh();
+          }}
+          onUpdate={async (id) => {
+            await updateVerifiedApp(id);
+            await appsStatus.refresh();
+          }}
+          onRemove={async (id) => {
+            await removeVerifiedApp(id);
+            await appsStatus.refresh();
+          }}
+        />
+      );
+      break;
+
     case 'network':
       content = (
         <div class="min-w-0">
@@ -483,6 +650,7 @@ export function App({ onAdministratorPasswordChanged }: AppProps) {
 
   return (
     <AppShell
+      featuredSensor={featuredSensor.view}
       accountRegistered={dashboardAccountRegistered}
       loading={route === 'network' ? wan.loading || lan.loading : current.loading}
       onRefresh={refreshCurrent}

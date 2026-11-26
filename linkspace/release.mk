@@ -1,0 +1,3 @@
+# GitHub release: linkspace-runtime-v0.3.3
+LINKSPACE_HASH_x86_64:=ad17a8f70b709fd5eb4dfb6a18cffc64913afe1575af7315cf5cf98a24a60d98
+LINKSPACE_HASH_aarch64:=0c3fd9f91f8070a6ab0a51d983f4861a4cbd409c71a424ed6bb92ae8c41999f0

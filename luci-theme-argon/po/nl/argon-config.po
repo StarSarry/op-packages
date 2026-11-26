@@ -30,6 +30,14 @@ msgstr "Een HEX-kleur (standaard: #5e72e4)."
 msgid "Action"
 msgstr "Actie"
 
+#: htdocs/luci-static/resources/view/argon-config.js:170
+msgid "Admin page glass effect"
+msgstr "Glas-effect van beheerpagina's"
+
+#: htdocs/luci-static/resources/view/argon-config.js:166
+msgid "Admin page wallpaper"
+msgstr "Achtergrond van beheerpagina's"
+
 #: htdocs/luci-static/resources/argon/branding.js:62
 msgid "Another update is running. Please try again."
 msgstr "Er wordt al een update uitgevoerd. Probeer het later opnieuw."
@@ -163,8 +171,8 @@ msgid "Grant UCI access for luci-theme-argon"
 msgstr "UCI-toegang verlenen aan luci-theme-argon"
 
 #: htdocs/luci-static/resources/view/argon-config.js:114
-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
-msgstr "Hier kunt u de vervaging en transparantie van de aanmeldpagina van het Argon-thema instellen en achtergrondafbeeldingen en -video’s beheren. Chrome wordt aanbevolen."
+msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+msgstr "Hier kunt u de vervaging en transparantie van de aanmeldpagina van het Argon-thema instellen en achtergrondafbeeldingen en -video’s beheren."
 
 #: htdocs/luci-static/resources/argon/branding.js:60
 msgid "Invalid PNG image or dimensions."
@@ -299,6 +307,10 @@ msgstr "Navigatie tonen of verbergen"
 #: htdocs/luci-static/resources/argon-overview.js:33
 msgid "Transmitted bytes"
 msgstr "Verzonden bytes"
+
+#: htdocs/luci-static/resources/view/argon-config.js:171
+msgid "Turning this off also hides the admin wallpaper and restores the default admin appearance."
+msgstr "Als u dit uitschakelt, wordt ook de achtergrond van de beheerpagina’s verborgen en wordt de standaardweergave van het beheer hersteld."
 
 #: htdocs/luci-static/resources/argon/branding.js:110
 msgid "Unable to load custom branding. Reload this page or reinstall the theme."
@@ -536,3 +548,23 @@ msgstr "Annuleren"
 #: htdocs/luci-static/resources/argon/updates.js
 msgid "Try again after %s."
 msgstr "Probeer het na %s opnieuw."
+
+#: ucode/template/themes/argon/login_background.ut
+msgid "Play background video"
+msgstr "Achtergrondvideo afspelen"
+
+#: ucode/template/themes/argon/login_background.ut
+msgid "Pause background video"
+msgstr "Achtergrondvideo pauzeren"
+
+#: ucode/template/themes/argon/header.ut
+msgid "Skip to content"
+msgstr "Naar inhoud springen"
+
+#: ucode/template/themes/argon/header.ut:46
+msgid "Close"
+msgstr "Sluiten"
+
+#: ucode/template/themes/argon/header.ut:43
+msgid "Navigation"
+msgstr "Navigatie"

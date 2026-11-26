@@ -23,6 +23,14 @@ msgstr ""
 msgid "Action"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/argon-config.js:170
+msgid "Admin page glass effect"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/argon-config.js:166
+msgid "Admin page wallpaper"
+msgstr ""
+
 #: htdocs/luci-static/resources/argon/branding.js:62
 msgid "Another update is running. Please try again."
 msgstr ""
@@ -160,7 +168,7 @@ msgstr ""
 #: htdocs/luci-static/resources/view/argon-config.js:114
 msgid ""
 "Here you can set the blur and transparency of the login page of argon theme, "
-"and manage the background pictures and videos. Chrome is recommended."
+"and manage the background pictures and videos."
 msgstr ""
 
 #: htdocs/luci-static/resources/argon/branding.js:60
@@ -299,6 +307,10 @@ msgstr ""
 
 #: htdocs/luci-static/resources/argon-overview.js:33
 msgid "Transmitted bytes"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/argon-config.js:171
+msgid "Turning this off also hides the admin wallpaper and restores the default admin appearance."
 msgstr ""
 
 #: htdocs/luci-static/resources/argon/branding.js:110
@@ -542,4 +554,24 @@ msgstr ""
 
 #: htdocs/luci-static/resources/argon/updates.js
 msgid "Try again after %s."
+msgstr ""
+
+#: ucode/template/themes/argon/login_background.ut
+msgid "Play background video"
+msgstr ""
+
+#: ucode/template/themes/argon/login_background.ut
+msgid "Pause background video"
+msgstr ""
+
+#: ucode/template/themes/argon/header.ut
+msgid "Skip to content"
+msgstr ""
+
+#: ucode/template/themes/argon/header.ut:46
+msgid "Close"
+msgstr ""
+
+#: ucode/template/themes/argon/header.ut:43
+msgid "Navigation"
 msgstr ""

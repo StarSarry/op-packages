@@ -10,14 +10,14 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-theme-vantage
-PKG_VERSION:=1.0.9
-PKG_RELEASE:=21
+PKG_VERSION:=1.2.1
+PKG_RELEASE:=54
 PKG_LICENSE:=GPL-3.0-or-later
 
 LUCI_TITLE:=Vantage theme
 LUCI_DESCRIPTION:=A console-style LuCI theme: icon rail with flyouts, \
 	breadcrumb, page tabs, Ctrl+K command palette, light and dark modes.
-LUCI_DEPENDS:=+luci-base +luci-app-vantage
+LUCI_DEPENDS:=+luci-base +luci-app-vantage +luci-app-vantage-traffic
 LUCI_MAINTAINER:=anothaDev <10740588+anothaDev@users.noreply.github.com>
 LUCI_URL:=https://github.com/anothaDev/luci-theme-vantage
 
@@ -33,6 +33,11 @@ LUCI_MINIFY_CSS:=0
 # them the package version instead of one derived from git history.
 LUCI_BASENAME:=vantage-theme
 PKG_PO_VERSION:=$(PKG_VERSION)-r$(PKG_RELEASE)
+
+# Appearance for every browser (Appearance under the colour-theme button)
+define Package/luci-theme-vantage/conffiles
+/etc/config/vantage_theme
+endef
 
 define Package/luci-theme-vantage/postrm
 #!/bin/sh
@@ -50,6 +55,8 @@ define Package/luci-theme-vantage/postrm
 		[ -z "$$alt" ] || uci -q set luci.main.mediaurlbase="$$alt"
 	fi
 	uci -q delete luci.themes.Vantage
+	# the login page's switch (docs/INSTALL.md, Troubleshooting) is the theme's
+	uci -q delete luci.main.vantage_https
 	uci -q commit luci
 }
 exit 0

@@ -30,6 +30,14 @@ msgstr "Mã màu HEX (mặc định: #5e72e4)."
 msgid "Action"
 msgstr "Thao tác"
 
+#: htdocs/luci-static/resources/view/argon-config.js:170
+msgid "Admin page glass effect"
+msgstr "Hiệu ứng kính trang quản trị"
+
+#: htdocs/luci-static/resources/view/argon-config.js:166
+msgid "Admin page wallpaper"
+msgstr "Hình nền trang quản trị"
+
 #: htdocs/luci-static/resources/argon/branding.js:62
 msgid "Another update is running. Please try again."
 msgstr "Một bản cập nhật khác đang chạy. Vui lòng thử lại sau."
@@ -163,8 +171,8 @@ msgid "Grant UCI access for luci-theme-argon"
 msgstr "Cấp quyền truy cập UCI cho luci-theme-argon"
 
 #: htdocs/luci-static/resources/view/argon-config.js:114
-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
-msgstr "Tại đây, bạn có thể thiết lập độ mờ và độ trong suốt của trang đăng nhập giao diện Argon, đồng thời quản lý hình ảnh và video nền. Khuyến nghị sử dụng Chrome."
+msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+msgstr "Tại đây, bạn có thể thiết lập độ mờ và độ trong suốt của trang đăng nhập giao diện Argon, đồng thời quản lý hình ảnh và video nền."
 
 #: htdocs/luci-static/resources/argon/branding.js:60
 msgid "Invalid PNG image or dimensions."
@@ -299,6 +307,10 @@ msgstr "Hiện hoặc ẩn menu điều hướng"
 #: htdocs/luci-static/resources/argon-overview.js:33
 msgid "Transmitted bytes"
 msgstr "Số byte đã gửi"
+
+#: htdocs/luci-static/resources/view/argon-config.js:171
+msgid "Turning this off also hides the admin wallpaper and restores the default admin appearance."
+msgstr "Tắt tùy chọn này cũng sẽ ẩn hình nền trang quản trị và khôi phục giao diện quản trị mặc định."
 
 #: htdocs/luci-static/resources/argon/branding.js:110
 msgid "Unable to load custom branding. Reload this page or reinstall the theme."
@@ -536,3 +548,23 @@ msgstr "Hủy"
 #: htdocs/luci-static/resources/argon/updates.js
 msgid "Try again after %s."
 msgstr "Thử lại sau %s."
+
+#: ucode/template/themes/argon/login_background.ut
+msgid "Play background video"
+msgstr "Phát video nền"
+
+#: ucode/template/themes/argon/login_background.ut
+msgid "Pause background video"
+msgstr "Tạm dừng video nền"
+
+#: ucode/template/themes/argon/header.ut
+msgid "Skip to content"
+msgstr "Chuyển đến nội dung"
+
+#: ucode/template/themes/argon/header.ut:46
+msgid "Close"
+msgstr "Đóng"
+
+#: ucode/template/themes/argon/header.ut:43
+msgid "Navigation"
+msgstr "Điều hướng"

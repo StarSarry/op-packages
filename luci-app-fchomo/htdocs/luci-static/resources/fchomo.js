@@ -268,7 +268,7 @@ const preset_outbound = {
 		['COMPATIBLE']
 	],
 	direct: [
-		['', _('null')],
+		['', _('none')],
 		['DIRECT'],
 		['GLOBAL']
 	],
@@ -339,10 +339,10 @@ const rules_type = [
 	{
 		label: _('Inbound'),
 		types: [
-			//['IN-PORT'],
-			//['IN-TYPE'],
+			['IN-PORT'],
+			['IN-TYPE'],
 			//['IN-USER'],
-			//['IN-NAME'],
+			['IN-NAME'],
 			['REMATCH-NAME']
 		]
 	},
@@ -509,17 +509,17 @@ const CBIGridSection = form.GridSection.extend({
 		return loadDefaultLabel.apply(this, arguments);
 	},
 
-	renderSectionAdd(extra_class) {
+	renderSectionAdd(/* ... */) {
 		const prefmt = this.hm_prefmt || '%s';
 		const LC = this.hm_lowcase_only;
 
-		let el = form.GridSection.prototype.renderSectionAdd.call(this, extra_class),
-			nameEl = el.querySelector('.cbi-section-create-name');
+		let node = form.GridSection.prototype.renderSectionAdd.apply(this, arguments),
+			nameEl = node.querySelector('.cbi-section-create-name');
 
 		nameEl.placeholder = _('Specify a ID');
 
 		ui.addValidator(nameEl, 'uciname', true, (v) => {
-			let button = el.querySelector('.cbi-section-create > .cbi-button-add');
+			let button = node.querySelector('.cbi-section-create > .cbi-button-add');
 
 			if (!v) {
 				button.disabled = true;
@@ -539,7 +539,7 @@ const CBIGridSection = form.GridSection.extend({
 			}
 		}, 'blur', 'keyup');
 
-		return el;
+		return node;
 	},
 
 	handleAdd(ev, name) {
@@ -551,11 +551,11 @@ const CBIGridSection = form.GridSection.extend({
 
 const CBIListValue = form.ListValue.extend({
 	renderWidget(/* ... */) {
-		let frameEl = form.ListValue.prototype.renderWidget.apply(this, arguments);
+		let node = form.ListValue.prototype.renderWidget.apply(this, arguments);
 
-		frameEl.querySelector('select').style["min-width"] = '10em';
+		node.querySelector('select').style["min-width"] = '10em';
 
-		return frameEl;
+		return node;
 	}
 });
 
@@ -567,7 +567,7 @@ const CBIDynamicList = form.DynamicList.extend({ // @less_25_12
 		const choices = this.transformChoices();
 		const items = L.toArray(value);
 
-		const widget = new UIDynamicList(items, choices, {
+		const node = new UIDynamicList(items, choices, {
 			id: this.cbid(section_id),
 			sort: this.keylist,
 			allowduplicates: this.allowduplicates,
@@ -578,7 +578,7 @@ const CBIDynamicList = form.DynamicList.extend({ // @less_25_12
 			disabled: (this.readonly != null) ? this.readonly : this.map.readonly
 		});
 
-		return widget.render();
+		return node.render();
 	}
 });
 
@@ -586,11 +586,11 @@ const CBIStaticList = form.DynamicList.extend({
 	__name__: 'CBI.StaticList',
 
 	renderWidget(/* ... */) {
-		let El = (less_25_12 ? CBIDynamicList : form.DynamicList).prototype.renderWidget.apply(this, arguments); // @less_25_12
+		let node = (less_25_12 ? CBIDynamicList : form.DynamicList).prototype.renderWidget.apply(this, arguments); // @less_25_12
 
-		El.querySelector('.add-item ul > li[data-value="-"]')?.remove();
+		node.querySelector('.add-item ul > li[data-value="-"]')?.remove();
 
-		return El;
+		return node;
 	}
 });
 
@@ -615,8 +615,8 @@ const CBIGroupListValue = CBIListValue.extend({
 	__name__: 'CBI.GroupListValue',
 
 	renderWidget(section_id, option_index, cfgvalue) {
-		const frameEl = CBIListValue.prototype.renderWidget.apply(this, arguments);
-		const select = frameEl.querySelector('select');
+		const node = CBIListValue.prototype.renderWidget.apply(this, arguments);
+		const select = node.querySelector('select');
 		const options = Array.from(select.options);
 
 		Object.keys(this.grplist).forEach((label) => {
@@ -628,7 +628,7 @@ const CBIGroupListValue = CBIListValue.extend({
 		});
 
 		select.value = (cfgvalue != null) ? cfgvalue : this.default;
-		return frameEl;
+		return node;
 	},
 
 	value(key, val) {
@@ -649,8 +649,8 @@ const CBIGroupDynamicList = (less_25_12 ? CBIDynamicList : form.DynamicList).ext
 	__name__: 'CBI.GroupDynamicList',
 
 	renderWidget(section_id, option_index, cfgvalue) {
-		const frameEl = (less_25_12 ? CBIDynamicList : form.DynamicList).prototype.renderWidget.apply(this, arguments); // @less_25_12
-		const select = frameEl.querySelector('ul');
+		const node = (less_25_12 ? CBIDynamicList : form.DynamicList).prototype.renderWidget.apply(this, arguments); // @less_25_12
+		const select = node.querySelector('ul');
 		const optLis = Array.from(select.querySelectorAll('li'));
 
 		Object.keys(this.grplist).forEach((label) => {
@@ -667,7 +667,7 @@ const CBIGroupDynamicList = (less_25_12 ? CBIDynamicList : form.DynamicList).ext
 			select.insertBefore(groupLi, firstLi);
 		});
 
-		return frameEl;
+		return node;
 	},
 
 	value: CBIGroupListValue.prototype.value
@@ -677,11 +677,11 @@ const CBIGroupStaticList = CBIGroupDynamicList.extend({
 	__name__: 'CBI.GroupStaticList',
 
 	renderWidget(/* ... */) {
-		let El = CBIGroupDynamicList.prototype.renderWidget.apply(this, arguments);
+		let node = CBIGroupDynamicList.prototype.renderWidget.apply(this, arguments);
 
-		El.querySelector('.add-item ul > li[data-value="-"]')?.remove();
+		node.querySelector('.add-item ul > li[data-value="-"]')?.remove();
 
-		return El;
+		return node;
 	}
 });
 
@@ -699,28 +699,29 @@ const CBIRichMultiValue = form.MultiValue.extend({
 
 const CBITextValue = form.TextValue.extend({
 	renderWidget(/* ... */) {
-		let frameEl = form.TextValue.prototype.renderWidget.apply(this, arguments);
+		let node = form.TextValue.prototype.renderWidget.apply(this, arguments);
 
-		frameEl.querySelector('textarea').style.fontFamily = monospacefonts.join(',');
+		node.querySelector('textarea').style.fontFamily = monospacefonts.join(',');
 
-		return frameEl;
+		return node;
 	}
 });
 
 const CBIGenValue = form.Value.extend({
 	__name__: 'CBI.GenValue',
 
-	renderWidget(/* ... */) {
+	renderWidget(section_id, option_index, cfgvalue) {
 		let node = form.Value.prototype.renderWidget.apply(this, arguments);
 
 		if (!this.password)
 			node.classList.add('control-group');
 
-		(node.querySelector('.control-group') || node).appendChild(E('button', {
-			class: 'cbi-button cbi-button-add',
-			title: _('Generate'),
-			click: ui.createHandlerFn(this, handleGenKey, this.hm_options || this.option)
-		}, [ _('Generate') ]));
+		if (this.section.section) // modalonly
+			(node.querySelector('.control-group') || node).appendChild(E('button', {
+				class: 'cbi-button cbi-button-add',
+				title: _('Generate'),
+				click: ui.createHandlerFn(this, handleGenKey, section_id, this.hm_options || this.option)
+			}, [ _('Generate') ]));
 
 		return node;
 	}
@@ -729,14 +730,15 @@ const CBIGenValue = form.Value.extend({
 const CBIGenText = CBITextValue.extend({
 	__name__: 'CBI.GenText',
 
-	renderWidget(/* ... */) {
+	renderWidget(section_id, option_index, cfgvalue) {
 		let node = CBITextValue.prototype.renderWidget.apply(this, arguments);
 
-		node.appendChild(E('button', {
-			class: 'cbi-button cbi-button-add',
-			title: _('Generate'),
-			click: ui.createHandlerFn(this, handleGenKey, this.hm_options || this.option)
-		}, [ _('Generate') ]));
+		if (this.section.section) // modalonly
+			(node.querySelector('.control-group') || node).appendChild(E('button', {
+				class: 'cbi-button cbi-button-add',
+				title: _('Generate'),
+				click: ui.createHandlerFn(this, handleGenKey, section_id, this.hm_options || this.option)
+			}, [ _('Generate') ]));
 
 		return node;
 	}
@@ -748,28 +750,29 @@ const CBICopyValue = form.Value.extend({
 	readonly: true,
 
 	renderWidget(section_id, option_index, cfgvalue) {
-		let node = form.Value.prototype.renderWidget.call(this, section_id, option_index, cfgvalue);
+		let node = form.Value.prototype.renderWidget.apply(this, arguments);
 
 		node.classList.add('control-group');
 
-		node.appendChild(E('button', {
-			class: 'cbi-button cbi-button-add',
-			click: ui.createHandlerFn(this, async (section_id) => {
-				try {
-					await navigator.clipboard.writeText(this.formvalue(section_id));
-					console.log('Content copied to clipboard!');
-				} catch (e) {
-					console.error('Failed to copy: ', e);
-				}
-				/* Deprecated
-				let inputEl = document.getElementById(this.cbid(section_id)).querySelector('input');
-				inputEl.select();
-				document.execCommand("copy");
-				inputEl.blur();
-				*/
-				return alert(_('Content copied to clipboard!'));
-			}, section_id)
-		}, [ _('Copy') ]));
+		if (this.section.section) // modalonly
+			node.appendChild(E('button', {
+				class: 'cbi-button cbi-button-add',
+				click: ui.createHandlerFn(this, async (section_id) => {
+					try {
+						await navigator.clipboard.writeText(this.formvalue(section_id));
+						console.log('Content copied to clipboard!');
+					} catch (e) {
+						console.error('Failed to copy: ', e);
+					}
+					/* Deprecated
+					let inputEl = document.getElementById(this.cbid(section_id)).querySelector('input');
+					inputEl.select();
+					document.execCommand("copy");
+					inputEl.blur();
+					*/
+					return alert(_('Content copied to clipboard!'));
+				}, section_id)
+			}, [ _('Copy') ]));
 
 		return node;
 	}
@@ -912,7 +915,7 @@ const CBIHandleImport = baseclass.extend(/** @lends hm.HandleImport.prototype */
 		return uci.save()
 			.then(L.bind(this.map.load, this.map))
 			.then(L.bind(this.map.reset, this.map))
-			.then(L.ui.hideModal)
+			.then(ui.hideModal)
 			.catch(() => {});
 	},
 
@@ -1309,7 +1312,7 @@ function loadModalTitle(title, addtitle, section_id) {
 	return label ? title + ' » ' + label : addtitle;
 }
 
-function loadLabel(preadds, section_id) {
+function loadChoices(preadds, section_id) {
 	delete this.keylist;
 	delete this.vallist;
 
@@ -1319,11 +1322,12 @@ function loadLabel(preadds, section_id) {
 	return this.super('load', section_id);
 }
 
-function loadLabelValues(uciconfig, sectiontype, options = {}) {
+function loadChoicesGetMap(uciconfig, sectiontype, options = {}) {
 	const values = [];
 
 	switch (sectiontype) {
 		case 'proxy_group':
+		case 'inbound':
 		case 'node':
 		case 'provider':
 			uci.sections(uciconfig, sectiontype, (res) => {
@@ -1373,7 +1377,7 @@ function loadLabelValues(uciconfig, sectiontype, options = {}) {
 	return values;
 }
 
-function renderStatus(ElId, isRunning, instance, noGlobal) {
+function renderStatus(elemId, isRunning, instance, noGlobal) {
 	const visible = isRunning && (isRunning.http || isRunning.https);
 
 	return E([
@@ -1381,7 +1385,7 @@ function renderStatus(ElId, isRunning, instance, noGlobal) {
 			class: 'cbi-button cbi-button-apply' + (noGlobal ? ' hidden' : ''),
 			click: ui.createHandlerFn(this, handleReload, instance)
 		}, [ _('Reload') ]),
-		updateStatus(E('span', { id: ElId, style: 'border: unset; font-style: italic; font-weight: bold' }), isRunning ? true : false),
+		updateStatus(E('span', { id: elemId, style: 'border: unset; font-style: italic; font-weight: bold' }), isRunning ? true : false),
 		E('a', {
 			class: 'cbi-button cbi-button-apply %s'.format(visible ? '' : 'hidden'),
 			href: visible ? getDashURL(isRunning) : '',
@@ -1390,24 +1394,24 @@ function renderStatus(ElId, isRunning, instance, noGlobal) {
 		}, [ _('Open Dashboard') ])
 	]);
 }
-function updateStatus(El, isRunning, instance, noGlobal) {
-	if (El) {
-		El.style.color = isRunning ? 'green' : 'red';
-		El.innerHTML = '&ensp;%s%s&ensp;'.format(noGlobal ? instance + ' ' : '', isRunning ? _('Running') : _('Not Running'));
+function updateStatus(node, isRunning, instance, noGlobal) {
+	if (node) {
+		node.style.color = isRunning ? 'green' : 'red';
+		node.innerHTML = '&ensp;%s%s&ensp;'.format(noGlobal ? instance + ' ' : '', isRunning ? _('Running') : _('Not Running'));
 		/* Dashboard button */
-		if (El.nextSibling?.localName === 'a')
+		if (node.nextSibling?.localName === 'a')
 			getClashAPI(instance).then((res) => {
 				let visible = isRunning && (res.http || res.https);
 				if (visible) {
-					El.nextSibling.classList.remove('hidden');
+					node.nextSibling.classList.remove('hidden');
 				} else
-					El.nextSibling.classList.add('hidden');
+					node.nextSibling.classList.add('hidden');
 
-				El.nextSibling.href = visible ? getDashURL(Object.assign(res, isRunning)) : '';
+				node.nextSibling.href = visible ? getDashURL(Object.assign(res, isRunning)) : '';
 			});
 	}
 
-	return El;
+	return node;
 }
 function getDashURL(isRunning) {
 	const tls = isRunning.https ? 's' : '';
@@ -1420,13 +1424,91 @@ function getDashURL(isRunning) {
 		String.format(dashrepos_urlparams[repo] || '', host, port, secret)
 }
 
+function renderHy2Realm(s, uciconfig) {
+	let o;
+
+	o = s.taboption('field_general', form.Flag, 'hysteria2_realm', _('Realm'));
+	o.default = o.disabled;
+	o.depends('type', 'hysteria2');
+	o.modalonly = true;
+
+	o = s.taboption('field_hysteria2_realm', form.Value, 'hysteria2_realm_server_url', _('Rendezvous server'));
+	o.placeholder = 'https://realm.hy2.io';
+	o.rmempty = false;
+	o.depends('hysteria2_realm', '1');
+	o.modalonly = true;
+
+	o = s.taboption('field_hysteria2_realm', form.Value, 'hysteria2_realm_token', _('Pre-shared key of rendezvous server'));
+	o.placeholder = 'public';
+	o.depends('hysteria2_realm', '1');
+	o.modalonly = true;
+
+	o = s.taboption('field_hysteria2_realm', form.Value, 'hysteria2_realm_id', _('Realm ID'));
+	o.placeholder = 'my-cabin-1f3a8c2e9b';
+	o.rmempty = false;
+	o.depends('hysteria2_realm', '1');
+	o.modalonly = true;
+
+	o = s.taboption('field_hysteria2_realm', form.DynamicList, 'hysteria2_realm_stun_servers', _('STUN servers'));
+	o.datatype = 'hostport';
+	o.default = ['stun.nextcloud.com:3478','stun.sip.us:3478','global.stun.twilio.com:3478'];
+	o.rmempty = false;
+	o.depends('hysteria2_realm', '1');
+	o.modalonly = true;
+
+	// 下面支持填写针对server-url的TLS配置(sni, skip-cert-verify, name-cert-verify, fingerprint, certificate, private-key, alpn)
+
+	o = s.taboption('field_hysteria2_realm', form.Value, 'hysteria2_realm_sni', _('TLS SNI'),
+		_('Hostname that the client attempts to connect to at the start of the TLS handshake process.'));
+	o.depends('hysteria2_realm', '1');
+	o.modalonly = true;
+
+	o = s.taboption('field_hysteria2_realm', form.DynamicList, 'hysteria2_realm_alpn', _('TLS ALPN'),
+		_('List of supported application level protocols, in order of preference.'));
+	o.default = ['h2', 'http/1.1'];
+	o.depends('hysteria2_realm', '1');
+	o.modalonly = true;
+
+	o = s.taboption('field_hysteria2_realm', form.Value, 'hysteria2_realm_fingerprint', _('Cert fingerprint'),
+		_('Certificate fingerprint. Used to implement SSL Pinning and prevent MitM.'));
+	o.validate = validateSha256Key || hm.validateSha256Key;
+	o.depends('hysteria2_realm', '1');
+	o.modalonly = true;
+
+	o = s.taboption('field_hysteria2_realm', form.Value, 'hysteria2_realm_name_cert_verify', _('Override cert DNSName'),
+		_('Used to verify the hostname on the returned certificates.'));
+	o.datatype = 'hostname';
+	o.depends('hysteria2_realm', '1');
+	o.modalonly = true;
+
+	o = s.taboption('field_hysteria2_realm', form.Flag, 'hysteria2_realm_skip_cert_verify', _('Skip cert verify'),
+		_('Donot verifying server certificate.') +
+		'<br/>' +
+		_('This is <strong>DANGEROUS</strong>, your traffic is almost like <strong>PLAIN TEXT</strong>! Use at your own risk!'));
+	o.default = o.disabled;
+	o.depends('hysteria2_realm', '1');
+	o.modalonly = true;
+
+	o = s.taboption('field_hysteria2_realm', form.Value, 'hysteria2_realm_cert_path', _('Certificate path') + _(' (mTLS)'),
+		_('The %s public key, in PEM format.').format(_('Client')));
+	o.value('/etc/fchomo/certs/client_publickey.pem');
+	o.depends('hysteria2_realm', '1');
+	o.modalonly = true;
+
+	o = s.taboption('field_hysteria2_realm', form.Value, 'hysteria2_realm_key_path', _('Key path') + _(' (mTLS)'),
+		_('The %s private key, in PEM format.').format(_('Client')));
+	o.value('/etc/fchomo/certs/client_privatekey.pem');
+	o.depends({hysteria2_realm: '1', hysteria2_realm_cert_path: /.+/});
+	o.modalonly = true;
+}
+
 function renderResDownload(section_id) {
 	const section_type = this.section.sectiontype;
 	const type = uci.get(this.config, section_id, 'type');
 	const url = uci.get(this.config, section_id, 'url');
 	const header = uci.get(this.config, section_id, 'header');
 
-	let El = E([
+	let node = E([
 		E('button', {
 			class: 'cbi-button cbi-button-add',
 			disabled: (type !== 'http') || null,
@@ -1445,14 +1527,14 @@ function renderResDownload(section_id) {
 		}, [ _('🡇') ]) //🗘
 	]);
 
-	return El;
+	return node;
 }
 
 function renderResLink(section_id) {
 	const section_type = this.section.sectiontype;
 	const type = uci.get(this.config, section_id, 'type');
 
-	let El = E([
+	let node = E([
 		E('span', {
 			title: this.readonly ? this.readonly : null
 		}, [
@@ -1467,11 +1549,10 @@ function renderResLink(section_id) {
 		])
 	]);
 
-	return El;
+	return node;
 }
 
-function handleGenKey(option) {
-	const section_id = this.section.section;
+function handleGenKey(section_id, option) {
 	const type = this.section.getOption('type')?.formvalue(section_id);
 	const widget = L.bind(function(option) {
 		return this.map.findElement('id', 'widget.' + this.cbid(section_id).replace(/\.[^\.]+$/, '.') + option);
@@ -1731,10 +1812,20 @@ function validateHexstr(length, section_id, value) {
 
 function validateBase64Key(length, section_id, value) {
 	/* Thanks to luci-proto-wireguard */
-	if (value)
+	if (value) {
 		if (value.length !== length || !value.match(/^(?:[A-Za-z0-9+\/]{4})*(?:[A-Za-z0-9+\/]{2}==|[A-Za-z0-9+\/]{3}=)?$/) || value[length-1] !== '=')
 			return _('Expecting: %s').format(_('valid base64 key with %d characters').format(length));
+	} else if (this.rmempty === false || (this.optional ?? true) !== false)
+		return _('Expecting: %s').format(_('non-empty value'));
 
+	return true;
+}
+
+function validateSha256Key(section_id, value) {
+	if (!value)
+		return true;
+	if (!((value.length === 64) && (value.match(/^[0-9a-fA-F]+$/))))
+		return _('Expecting: %s').format(_('valid SHA256 string with %d characters').format(64));
 	return true;
 }
 
@@ -2015,36 +2106,37 @@ return baseclass.extend({
 	// load
 	loadDefaultLabel,
 	loadModalTitle,
-	loadLabel,
-	loadLabelValues,
+	loadChoices,
+	loadChoicesGetMap,
 	// render
 	renderStatus,
 	updateStatus,
 	getDashURL,
+	renderHy2Realm,
 	renderResDownload,
 	renderResLink,
 	handleGenKey,
 	handleReload,
 	handleRemoveIdles,
-	textvalue2Value,
+	textvalue2Value,  // this
 	// validate
 	validateAuth,
 	validateAuthUsername,
 	validateAuthPassword,
-	validateCommonPort,
+	validateCommonPort,  // this
 	validateBytesize,
 	validateTimeDuration,
 	validateJson,
 	validateUUID,
 	validateUrl,
-	// validate with bind this
 	validateHexstr,
-	validateBase64Key,
-	validateMTLSClientAuth,
-	validatePresetIDs,
-	validateShadowsocksPassword,
+	validateBase64Key,  // this
+	validateSha256Key,
+	validateMTLSClientAuth,  // this
+	validatePresetIDs,  // this
+	validateShadowsocksPassword,  // this
 	validateSudokuCustomTable,
-	validateUniqueValue,
+	validateUniqueValue,  // this
 	// file operations
 	lsDir,
 	readFile,

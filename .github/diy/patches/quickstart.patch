@@ -1,19 +1,40 @@
---- a/luci-app-quickstart/luasrc/view/quickstart/main.htm
-+++ b/luci-app-quickstart/luasrc/view/quickstart/main.htm
-@@ -47,6 +47,13 @@
-           location.href = vue_prefix;
-         }
-       }
-+    setTimeout(() => {
-+  	  document.querySelectorAll('.item_container .item').forEach(el => {
-+  	  if (el.textContent.trim() === '软件源配置') {
-+  	  el.remove(); // 或 el.style.display = 'none';
-+  	  }
-+  	  });
-+    }, 800);
-     })();
- </script>
- <div id="app">
+--- a/luci-app-quickstart/po/zh-cn/quickstart.po
++++ b/luci-app-quickstart/po/zh-cn/quickstart.po
+@@ -2,7 +2,7 @@ msgid "NetworkGuide"
+ msgstr "网络向导"
+ 
+ msgid "QuickStart"
+-msgstr "首页"
++msgstr "起始页"
+ 
+ msgid "RAID"
+ msgstr "磁盘阵列"
+
+--- a/luci-app-quickstart/luasrc/controller/istore_backend.lua
++++ b/luci-app-quickstart/luasrc/controller/istore_backend.lua
+@@ -108,14 +108,16 @@ end
+ 
+ function istore_backend() 
+   local sock = nixio.socket("unix", "stream")
++  if sock and not sock:connect(ISTOREOS_SOCKET) then
++    sock:close()
++	sock = nil
++  end
+   if not sock then
+-    http.status(500, "connect failed")
+-    return
++	sock = nixio.connect("127.0.0.1", 3038)
+   end
+-  if not sock:connect(ISTOREOS_SOCKET) then
+-    sock:close()
+-    http.status(500, "connect failed")
+-    return
++  if not sock then
++	http.status(500, "connect failed")
++	return
+   end
+   local input = {}
+   input[#input+1] = http.getenv("REQUEST_METHOD") .. " " .. http.getenv("REQUEST_URI") .. " HTTP/1.1"
 
 --- a/luci-app-quickstart/Makefile
 +++ b/luci-app-quickstart/Makefile
@@ -22,7 +43,7 @@
  
  LUCI_TITLE:=LuCI support for quickstart 
 -LUCI_DEPENDS:=+quickstart +luci-app-store
-+LUCI_DEPENDS:=+quickstart +luci-app-ttyd +luci-i18n-ttyd-zh-cn
++LUCI_DEPENDS:=+quickstart +luci-app-ttyd
  LUCI_PKGARCH:=all
  
  # PKG_RELEASE MUST be empty for luci.mk
@@ -39,19 +60,12 @@
          entry({"admin", "network_guide", "pages"}, call("quickstart_index", {index={"admin", "network_guide", "pages"}})).leaf = true
          if uci:get("quickstart", "main", "wifi_menu") == "1" then
 diff --git a/luci-app-quickstart/root/usr/share/luci/menu.d/luci-app-quickstart.json b/luci-app-quickstart/root/usr/share/luci/menu.d/luci-app-quickstart.json
-deleted file mode 100644
-index d1667bb..0000000
 --- a/luci-app-quickstart/root/usr/share/luci/menu.d/luci-app-quickstart.json
-+++ /dev/null
-@@ -1,10 +0,0 @@
--{
++++ b/luci-app-quickstart/root/usr/share/luci/menu.d/luci-app-quickstart.json
+@@ -1,5 +1,5 @@
+ {
 -	"admin/quickstart/*": {
--		"title": "QuickStart",
--		"order": 1,
--		"action": {
--			"type": "template",
--			"path": "quickstart/home"
--		}
--	}
--}
-\ No newline at end of file
++	"admin/status/quickstart/*": {
+ 		"title": "QuickStart",
+ 		"order": 1,
+ 		"action": {

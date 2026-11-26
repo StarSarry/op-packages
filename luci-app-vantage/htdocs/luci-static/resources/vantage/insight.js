@@ -21,7 +21,6 @@ var WEAK_DBM = -75;
 function num(v) { v = +v; return isFinite(v) ? v : 0; }
 function finite(v) { return typeof v === 'number' && isFinite(v); }
 function own(o, k) { return o != null && Object.prototype.hasOwnProperty.call(o, k); }
-function speedShort(mbps) { return mbps >= 1000 ? (mbps / 1000) + 'G' : mbps + 'M'; }
 function speedLong(mbps) { return mbps >= 1000 ? _('%s Gbit/s').format(mbps / 1000) : _('%s Mbit/s').format(mbps); }
 function rank(level) { return { err: 3, warn: 2, info: 1, ok: 0 }[level] || 0; }
 
@@ -31,7 +30,8 @@ return baseclass.extend({
 
 	/* ------------------------------------------------------------ health */
 
-	/* model + { cpu: { pct, cores } | null, uplinkRate: { rx, tx } | null }
+	/* model + { cpu: { pct, cores } | null, uplinkRate: { rx, tx } | null,
+	   temps: model.temps() | null }
 	   (model.wired: no Wi-Fi checks)
 	   -> [ { id, level, title, value, reason, detail, page } ]
 	   value and reason are short enough for a health chip; detail is the
@@ -42,20 +42,24 @@ return baseclass.extend({
 		var out = [], dev = model.device || {}, up = model.uplink;
 
 		/* uplink: live traffic is the value, the negotiated link the context */
-		if (!up) out.push({ id: 'uplink', level: 'err', title: _('Uplink'), value: _('Down'), reason: _('No interface with a route'),
+		if (!up) out.push({ id: 'uplink', level: 'err', title: _('Uplink', 'vantage'), value: _('Down', 'vantage'), reason: _('No interface with a route'),
 			detail: _('No network interface with a route is up'), page: PAGES.network });
-		else if (up.carrier === false) out.push({ id: 'uplink', level: 'err', title: _('Uplink'), value: _('No link'), reason: _('%s: no carrier').format(up.dev),
+		else if (up.carrier === false) out.push({ id: 'uplink', level: 'err', title: _('Uplink', 'vantage'), value: _('No link'), reason: _('%s: no carrier').format(up.dev),
 			detail: _('%s has no carrier: cable unplugged or switch port down').format(up.dev), page: PAGES.network });
-		else if (up.speed && up.speed.duplex === 'half') out.push({ id: 'uplink', level: 'warn', title: _('Uplink'), value: _('Half duplex'), reason: _('%s · check cable').format(up.dev),
+		else if (up.speed && up.speed.duplex === 'half') out.push({ id: 'uplink', level: 'warn', title: _('Uplink', 'vantage'), value: _('Half duplex'), reason: _('%s · check cable').format(up.dev),
 			detail: _('%s negotiated half duplex; check the cable and switch port').format(up.dev), page: PAGES.network });
-		else if (up.speed && up.speed.mbps < 1000) out.push({ id: 'uplink', level: 'warn', title: _('Uplink'), value: _('%s Mbit/s').format(up.speed.mbps), reason: _('%s · slow link').format(up.dev),
+		/* under 1 Gbit/s, unless that is the fastest the port and the one
+		   at the other end both offer (a Fast Ethernet port, a modem's
+		   100 Mbit/s hand-off); where that is not known, as before */
+		else if (up.speed && up.speed.mbps < 1000 && !(finite(up.linkMax) && up.speed.mbps >= up.linkMax)) out.push({ id: 'uplink', level: 'warn', title: _('Uplink', 'vantage'), value: _('%s Mbit/s').format(up.speed.mbps), reason: _('%s · slow link').format(up.dev),
 			detail: _('%s negotiated only %d Mbit/s; a cable pair or port may be faulty').format(up.dev, up.speed.mbps), page: PAGES.network });
 		else {
 			var rate = live.uplinkRate && finite(live.uplinkRate.rx) && finite(live.uplinkRate.tx) ? live.uplinkRate : null;
-			/* no-break spaces keep '↑ 2.9 Mbit/s' and '2.5G link' whole when the chip wraps */
-			var link = up.speed ? _('%s link').format(speedShort(up.speed.mbps)).replace(/ /g, '\u00a0') : null;
-			out.push({ id: 'uplink', level: 'ok', title: _('Uplink'), value: rate ? '↓ ' + fmt.bits(rate.rx) : _('Up'),
-				reason: [ rate ? ('↑ ' + fmt.bits(rate.tx)).replace(/ /g, '\u00a0') : null, up.dev, link ].filter(Boolean).join(' · '),
+			/* no-break spaces keep '↑ 2.9 Mbit/s' and '2.5 Gbit/s link' whole when the chip wraps */
+			var link = up.speed ? _('%s link').format(speedLong(up.speed.mbps)).replace(/ /g, '\u00a0') : null;
+			out.push({ id: 'uplink', level: 'ok', title: _('Uplink', 'vantage'), value: rate ? '↓ ' + fmt.bits(rate.rx) : _('Up', 'vantage'),
+				/* the device name only until there is a rate (the path names it) */
+				reason: [ rate ? ('↑ ' + fmt.bits(rate.tx)).replace(/ /g, '\u00a0') : up.dev, link ].filter(Boolean).join(' · '),
 				detail: (up.speed ? _('%s up at %s').format(up.dev, speedLong(up.speed.mbps)) : _('%s up').format(up.dev)) +
 					(up.gateway ? ', ' + _('gateway %s').format(up.gateway) : '') +
 					(rate ? '; ' + _('now %s down, %s up').format(fmt.bits(rate.rx), fmt.bits(rate.tx)) : ''),
@@ -65,57 +69,80 @@ return baseclass.extend({
 		/* CPU */
 		var cpu = live.cpu && finite(live.cpu.pct) ? live.cpu.pct : null, cores = (live.cpu && live.cpu.cores && live.cpu.cores.length) || 1;
 		var load = (dev.load || [])[0];
-		if (cpu == null) out.push({ id: 'cpu', level: 'info', title: _('CPU'), value: fmt.DASH, reason: _('Measuring…'), detail: _('Measuring over the next poll'), page: PAGES.processes });
-		else out.push({ id: 'cpu', level: cpu >= 90 ? 'err' : cpu >= 70 ? 'warn' : 'ok', title: _('CPU'), value: fmt.pct(cpu),
-			reason: cpu >= 70 ? _('Busy · load %s').format(fmt.load(load)) : _('Load %s · %d cores').format(fmt.load(load), cores),
-			detail: cpu >= 70 ? _('Busy; load %s on %d cores; see the busiest processes').format(fmt.load(load), cores) : _('Load %s on %d cores').format(fmt.load(load), cores),
+		/* the hottest sensor, when the device has any */
+		var hot = live.temps && live.temps[0] ? fmt.celsius(live.temps[0].celsius) : null;
+		if (cpu == null) out.push({ id: 'cpu', level: 'info', title: _('CPU', 'vantage'), value: fmt.DASH, reason: _('Measuring…'), detail: _('Measuring over the next poll'), page: PAGES.processes });
+		else out.push({ id: 'cpu', level: cpu >= 90 ? 'err' : cpu >= 70 ? 'warn' : 'ok', title: _('CPU', 'vantage'), value: fmt.pct(cpu),
+			reason: (cpu >= 70 ? _('Busy · load %s').format(fmt.load(load)) : fmt.N_(cores, 'Load %s · %d core', 'Load %s · %d cores').format(fmt.load(load), cores)) + (hot ? ' · ' + hot : ''),
+			detail: (cpu >= 70 ? fmt.N_(cores, 'Busy; load %s on %d core; see the busiest processes', 'Busy; load %s on %d cores; see the busiest processes').format(fmt.load(load), cores)
+				: fmt.N_(cores, 'Load %s on %d core', 'Load %s on %d cores').format(fmt.load(load), cores)) +
+				(hot ? ' · ' + _('Temperature %s').format(hot) : ''),
 			page: PAGES.processes });
 
 		/* memory, framed as available (as in the System tile) */
 		var mem = dev.memory;
 		if (mem) {
 			var avail = finite(mem.availPct) ? mem.availPct : 100 - num(mem.usedPct);
-			out.push({ id: 'memory', level: mem.usedPct >= 90 ? 'err' : mem.usedPct >= 80 ? 'warn' : 'ok', title: _('Memory'), value: _('%s available').format(fmt.pct(avail)),
+			out.push({ id: 'memory', level: mem.usedPct >= 90 ? 'err' : mem.usedPct >= 80 ? 'warn' : 'ok', title: _('Memory'), value: _('%s available', 'vantage').format(fmt.pct(avail)),
 				reason: _('%s of %s').format(fmt.bytes(mem.available), fmt.bytes(mem.total)),
 				detail: _('%s of %s available (%s in use)').format(fmt.bytes(mem.available), fmt.bytes(mem.total), fmt.pct(mem.usedPct)), page: PAGES.processes });
 		}
 
 		/* radios and signal; neither applies to a wired-only device */
-		if (!model.wired) this.wifiHealth(model, out);
+		if (!model.wired) this.wifiHealth(model, out, live.quiet);
 
-		/* storage */
-		var root = (dev.storage || [])[0];
+		/* storage: the root filesystem, by its key (the model's list starts
+		   with /tmp where system info has no root); without one, no check.
+		   An overlay on most devices, a plain ext4 root on others */
+		var root = (dev.storage || []).filter(function(s) { return s && s.key === 'root'; })[0];
 		if (root) out.push({ id: 'storage', level: root.usedPct >= 95 ? 'err' : root.usedPct >= 85 ? 'warn' : 'ok', title: _('Storage'), value: _('%s used').format(fmt.pct(root.usedPct)),
-			reason: _('%s free').format(fmt.bytes(root.free)), detail: _('%s free on the overlay (%s used)').format(fmt.bytes(root.free), fmt.pct(root.usedPct)), page: PAGES.mounts });
+			reason: _('%s free').format(fmt.bytes(root.free)), detail: _('%s free on the root filesystem (%s used)').format(fmt.bytes(root.free), fmt.pct(root.usedPct)), page: PAGES.mounts });
 
 		return out;
 	},
 
 	/* the Wi-Fi and Signal checks, appended to out; an SSID without
-	   clients is normal, not a fault */
-	wifiHealth: function(model, out) {
+	   clients is idle, not a fault */
+	wifiHealth: function(model, out, quietMacs) {
 		var radios = model.radios || [], nSsid = (model.ssids || []).length;
 		var off = radios.filter(function(r) { return r.disabled; }), down = radios.filter(function(r) { return !r.disabled && !r.up; });
 		var idle = (model.ssids || []).filter(function(s) { return s.up && !s.clients; });
 		if (!radios.length) out.push({ id: 'radios', level: 'info', title: _('Wi-Fi'), value: _('None'), reason: _('No radios reported'), detail: _('This device reports no radios'), page: PAGES.wireless });
-		else if (down.length) out.push({ id: 'radios', level: 'err', title: _('Wi-Fi'), value: _('%d down').format(down.length), reason: _('%s is not up').format(down[0].bandLabel),
+		else if (down.length) out.push({ id: 'radios', level: 'err', title: _('Wi-Fi'), value: fmt.N_(down.length, '%d radio down', '%d radios down').format(down.length), reason: _('%s is not up').format(down[0].bandLabel),
 			detail: _('%s (%s) is enabled but not up').format(down[0].id, down[0].bandLabel), page: PAGES.wireless });
-		else if (off.length) out.push({ id: 'radios', level: 'warn', title: _('Wi-Fi'), value: _('%d off').format(off.length), reason: _('%s is disabled').format(off[0].bandLabel),
+		/* a radio switched off in the configuration is a choice, not a
+		   fault: shown, never tinted or counted as needing attention */
+		else if (off.length) out.push({ id: 'radios', level: 'info', title: _('Wi-Fi'), value: fmt.N_(off.length, '%d radio off', '%d radios off').format(off.length), reason: _('%s is disabled').format(off[0].bandLabel),
 			detail: _('%s (%s) is disabled').format(off[0].id, off[0].bandLabel), page: PAGES.wireless });
-		else out.push({ id: 'radios', level: 'ok', title: _('Wi-Fi'), value: _('%d up').format(radios.length),
-			reason: idle.length ? _('%d SSIDs · %d idle').format(nSsid, idle.length) : _('%d SSIDs on air').format(nSsid),
-			detail: idle.length ? _('%d SSIDs broadcasting; %d without clients, which is fine').format(nSsid, idle.length) : _('%d SSIDs broadcasting').format(nSsid),
+		else out.push({ id: 'radios', level: 'ok', title: _('Wi-Fi'), value: fmt.N_(radios.length, '%d radio up', '%d radios up').format(radios.length),
+			reason: idle.length ? fmt.N_(nSsid, '%d SSID · %d idle', '%d SSIDs · %d idle').format(nSsid, idle.length) : fmt.N_(nSsid, '%d SSID on air', '%d SSIDs on air').format(nSsid),
+			detail: idle.length ? fmt.N_(nSsid, '%d SSID broadcasting, %d idle', '%d SSIDs broadcasting, %d idle').format(nSsid, idle.length) : fmt.N_(nSsid, '%d SSID broadcasting', '%d SSIDs broadcasting').format(nSsid),
 			page: PAGES.wireless });
 
-		/* signal */
-		var clients = model.clients || [];
-		var weak = clients.filter(function(c) { return c.signal != null && c.signal < WEAK_DBM; }).sort(function(a, b) { return a.signal - b.signal; });
-		if (!clients.length) out.push({ id: 'signal', level: 'info', title: _('Signal'), value: _('No clients'), reason: _('Nobody associated'), detail: _('No stations are associated right now'), page: PAGES.wireless });
+		/* signal; a station set quiet (#110: far away on purpose) is left
+		   out, of the warning and of the weakest; so are a paired access
+		   point's stations (this device cannot help them) */
+		var clients = (model.clients || []).filter(function(c) { return !c.ap; }), quiet = quietMacs || {};
+		var counted = clients.filter(function(c) { return !quiet[c.mac]; });
+		var weak = counted.filter(function(c) { return c.signal != null && c.signal < WEAK_DBM; }).sort(function(a, b) { return a.signal - b.signal; });
+		var heard = counted.filter(function(c) { return c.signal != null; }).sort(function(a, b) { return a.signal - b.signal; });
+		if (!clients.length) out.push({ id: 'signal', level: 'info', title: _('Signal'), value: _('No clients'), reason: '', detail: _('No stations are associated right now'), page: PAGES.wireless });
 		else if (weak.length) out.push({ id: 'signal', level: 'warn', title: _('Signal'), value: _('%d weak').format(weak.length),
-			reason: _('%s · %s').format(weak[0].name, fmt.dbm(weak[0].signal)),
-			detail: _('%s at %s; below %s roaming and throughput suffer').format(weak[0].name, fmt.dbm(weak[0].signal), fmt.dbm(WEAK_DBM)), page: PAGES.wireless, client: weak[0].mac });
-		else out.push({ id: 'signal', level: 'ok', title: _('Signal'), value: _('All good'), reason: _('All above %s').format(fmt.dbm(WEAK_DBM)),
-			detail: _('All %d clients above %s').format(clients.length, fmt.dbm(WEAK_DBM)), page: PAGES.wireless });
+			/* the level stays in one piece when the line wraps */
+			reason: _('%s · %s').format(weak[0].name, fmt.dbm(weak[0].signal).replace(/ /g, '\u00a0')),
+			detail: _('%s at %s; below %s roaming and throughput suffer').format(weak[0].name, fmt.dbm(weak[0].signal), fmt.dbm(WEAK_DBM)), page: PAGES.wireless,
+			/* one weak client opens its details, several the list of them
+			   (the weakest's details where the layout hides that list) */
+			client: weak[0].mac, list: weak.length > 1 ? 'weak' : null });
+		/* all fine: the weakest, which is how close the network is to a problem */
+		else if (!counted.length) out.push({ id: 'signal', level: 'ok', title: _('Signal'), value: fmt.DASH,
+			reason: _('No warnings asked for'), detail: _('Every client here is set not to warn about its signal'), page: PAGES.wireless });
+		else out.push({ id: 'signal', level: 'ok', title: _('Signal'), value: heard.length ? fmt.dbm(heard[0].signal) : fmt.DASH,
+			reason: !heard.length ? _('Not reported by the driver') : heard.length === 1 ? _('The only measured client')
+				: fmt.N_(heard.length, 'Weakest of %d client', 'Weakest of %d clients').format(heard.length),
+			detail: !heard.length ? _('The driver reports no signal levels')
+				: heard.length === 1 ? _('The one measured client is above %s').format(fmt.dbm(WEAK_DBM))
+				: fmt.N_(heard.length, '%d measured client is above %s', '%d measured clients are above %s').format(heard.length, fmt.dbm(WEAK_DBM)), page: PAGES.wireless });
 	},
 
 	/* -> { level, count (warn+err), headline } */
@@ -156,12 +183,12 @@ return baseclass.extend({
 		}
 
 		if (c.legacyOnRadio)
-			factors.push({ cost: 5, text: _('%s device on a newer radio; uses more airtime per byte').format(c.gen === 'legacy' ? _('Legacy') : c.gen),
+			factors.push({ cost: 5, text: _('%s device on a newer radio; uses more airtime per byte').format(c.gen === 'legacy' ? _('Legacy', 'vantage') : c.gen),
 				short: _('Older %s device').format(c.gen === 'legacy' ? _('legacy') : c.gen) });
 
 		var cost = factors.reduce(function(a, f) { return a + f.cost; }, 0);
 		var score = Math.max(0, Math.min(100, 100 - cost));
-		var grade = score >= 85 ? _('Excellent') : score >= 65 ? _('Good') : score >= 40 ? _('Fair') : _('Poor');
+		var grade = score >= 85 ? _('Excellent', 'vantage') : score >= 65 ? _('Good', 'vantage') : score >= 40 ? _('Fair', 'vantage') : _('Poor', 'vantage');
 		var level = score >= 65 ? 'ok' : score >= 40 ? 'warn' : 'err';
 		var worst = factors.slice().sort(function(a, b) { return b.cost - a.cost; })[0];
 		var reason = (worst && worst.cost > 0) ? worst.text
@@ -174,17 +201,26 @@ return baseclass.extend({
 	/* ------------------------------------------------------ top talkers */
 
 	/* clients + rates { mac: { rx, tx } } (AP view: tx = to the client)
-	   -> top n [ { mac, name, down, up, total, share } ] with total > 0 */
-	topTalkers: function(clients, rates, n) {
+	   -> top n [ { mac, name, down, up, total, share } ] with total > 0.
+	   This device's clients: a paired access point's (c.ap) push none of
+	   them out.
+	   hosts + hostRates: the wired hosts that have a rate of their own
+	   (the view's pick: a port to themselves), ranked with the stations
+	   and marked wired. A port counts as a radio does, from this side of
+	   the link: its tx went to the device, so down is tx in every row */
+	topTalkers: function(clients, rates, n, hosts, hostRates) {
 		var list = [], sum = 0;
-		(clients || []).forEach(function(c) {
-			var r = own(rates, c.mac) ? rates[c.mac] : null;
+		function add(c, r, wired) {
 			if (!r) return;
 			var down = num(r.tx), up = num(r.rx), total = down + up;
 			if (!(total > 0)) return;
 			sum += total;
-			list.push({ mac: c.mac, name: c.name, down: down, up: up, total: total });
-		});
+			var t = { mac: c.mac, name: c.name, down: down, up: up, total: total };
+			if (wired) t.wired = true;
+			list.push(t);
+		}
+		(clients || []).forEach(function(c) { add(c, !c.ap && own(rates, c.mac) ? rates[c.mac] : null, false); });
+		(hosts || []).forEach(function(h) { add(h, own(hostRates, h.mac) ? hostRates[h.mac] : null, true); });
 		list.sort(function(a, b) { return b.total - a.total || (a.mac < b.mac ? -1 : 1); });
 		list.forEach(function(t) { t.share = sum > 0 ? t.total / sum : 0; });
 		return list.slice(0, n > 0 ? n : 5);
@@ -193,15 +229,27 @@ return baseclass.extend({
 	/* --------------------------------------------------------- presence */
 
 	/* Session presence. state: { baseline: [macs] | null, present: { mac: client },
-	   gone: { mac: { client, at } }, firstSeen: { mac: ms } }.
+	   gone: { mac: { client, at } }, firstSeen: { mac: ms }, aps: [ id ] }.
 	   The first call fixes the baseline (what was there when the page
 	   opened); later arrivals are "new". Stations that leave are kept as
-	   gone for keepMs. -> { state, isNew: { mac: true }, gone: [ { client, at } ] } */
-	presence: function(state, clients, now, keepMs) {
+	   gone for keepMs. -> { state, isNew: { mac: true }, gone: [ { client, at } ] }
+	   okAps: the paired access points reporting now, by id. One that
+	   reports for the first time (state.aps has those that did) brings
+	   stations that were there before the page opened: they join the
+	   baseline. A station of one (c.ap) that is no longer listed is not
+	   kept as gone: its access point may only have stopped reporting, and
+	   how many they are is the access points' say. */
+	presence: function(state, clients, now, keepMs, okAps) {
 		state = state || {};
 		var baseline = Array.isArray(state.baseline) ? state.baseline : null;
 		var present = Object.create(null), gone = Object.create(null), firstSeen = Object.create(null), isNew = Object.create(null);
 		var prevPresent = state.present || {}, prevGone = state.gone || {}, prevFirst = state.firstSeen || {};
+		var reported = Array.isArray(state.aps) ? state.aps : [];
+		var first = (Array.isArray(okAps) ? okAps : []).filter(function(id) { return reported.indexOf(id) < 0; });
+		if (baseline && first.length) {
+			baseline = baseline.slice();
+			(clients || []).forEach(function(c) { if (c.ap && first.indexOf(c.ap.id) >= 0 && baseline.indexOf(c.mac) < 0) baseline.push(c.mac); });
+		}
 
 		(clients || []).forEach(function(c) {
 			present[c.mac] = c;
@@ -213,12 +261,12 @@ return baseclass.extend({
 			if (!own(present, mac) && g && now - g.at < keepMs) { gone[mac] = g; firstSeen[mac] = prevFirst[mac]; }
 		});
 		Object.keys(prevPresent).forEach(function(mac) {
-			if (!own(present, mac)) { gone[mac] = { client: prevPresent[mac], at: now }; firstSeen[mac] = prevFirst[mac]; }
+			if (!own(present, mac) && !prevPresent[mac].ap) { gone[mac] = { client: prevPresent[mac], at: now }; firstSeen[mac] = prevFirst[mac]; }
 		});
 
 		var goneList = Object.keys(gone).map(function(k) { return gone[k]; }).sort(function(a, b) { return b.at - a.at; });
 		return {
-			state: { baseline: baseline || Object.keys(present), present: present, gone: gone, firstSeen: firstSeen },
+			state: { baseline: baseline || Object.keys(present), present: present, gone: gone, firstSeen: firstSeen, aps: reported.concat(first) },
 			isNew: isNew,
 			gone: goneList
 		};
@@ -237,12 +285,10 @@ return baseclass.extend({
 		(radios || []).forEach(function(r) {
 			var v = own(rates, r.id) ? num(rates[r.id].rx) + num(rates[r.id].tx) : 0;
 			var notes = [];
-			if (r.disabled) notes.push({ level: 'warn', text: _('Radio is disabled') });
+			if (r.disabled) notes.push({ level: 'info', text: _('Radio is disabled') });
 			else if (!r.up) notes.push({ level: 'err', text: _('Radio is enabled but not up') });
 			if (top === r.id && sum > 0 && (radios.length > 1)) notes.push({ level: 'info', text: _('Busiest radio: %s of Wi-Fi traffic').format(fmt.pct(v / sum * 100)) });
 			if (r.legacy) notes.push({ level: 'info', text: r.legacy === 1 ? _('1 older device (Wi-Fi 4 or earlier) slows airtime') : _('%d older devices (Wi-Fi 4 or earlier) slow airtime').format(r.legacy) });
-			if (r.noise == null && r.noiseRaw != null) notes.push({ level: 'muted', text: _('Noise floor not reported by the driver') });
-			if (r.up && !r.clients) notes.push({ level: 'muted', text: _('No clients; idle radios are fine') });
 			out[r.id] = { busiest: top === r.id && sum > 0, share: sum > 0 ? v / sum : 0, notes: notes };
 		});
 		return out;

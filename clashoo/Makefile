@@ -1,18 +1,18 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=clashoo
-PKG_UPSTREAM_VERSION:=1.19.33
+PKG_UPSTREAM_VERSION:=1.19.34
 PKG_UPSTREAM_TAG:=v$(PKG_UPSTREAM_VERSION)
-PKG_SHORT_SHA:=3f27ef3
+PKG_SHORT_SHA:=0455d0d
 
-PKG_VERSION:=2026.10.26-r3
-PKG_RELEASE:=20
+PKG_VERSION:=2026.11.25
+PKG_RELEASE:=39
 
 PKG_SOURCE:=$(PKG_NAME)-stable-$(PKG_UPSTREAM_TAG)-$(PKG_SHORT_SHA).tar.gz
 PKG_SOURCE_SUBDIR:=$(PKG_NAME)-stable-$(PKG_UPSTREAM_TAG)-$(PKG_SHORT_SHA)
 PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_SOURCE_SUBDIR)
 PKG_SOURCE_URL:=https://github.com/kenzok8/openwrt-clashoo/releases/download/mihomo-src
-PKG_SOURCE_VERSION:=392b4ed33f99b4025cf2ec0054993d01d86a085a
+PKG_SOURCE_VERSION:=19b02ed25119bc764ada7734ef014e38424dba23
 PKG_HASH:=skip
 PKG_BUILD_VERSION:=$(PKG_UPSTREAM_TAG)
 
@@ -36,7 +36,7 @@ define Package/clashoo
   SECTION:=net
   CATEGORY:=Network
   TITLE:=Clashoo (Mihomo)
-  DEPENDS:=$(GO_ARCH_DEPENDS) +ca-bundle +yq +firewall4 +ip-full +coreutils-nohup +coreutils-timeout +kmod-inet-diag +kmod-nft-socket +kmod-nft-tproxy +kmod-tun +kmod-dummy +unzip
+  DEPENDS:=$(GO_ARCH_DEPENDS) +ca-bundle +curl +yq +firewall4 +ip-full +coreutils-nohup +coreutils-timeout +kmod-inet-diag +kmod-nft-socket +kmod-nft-tproxy +kmod-tun +kmod-dummy +unzip
   PROVIDES:=mihomo clash-meta
 endef
 

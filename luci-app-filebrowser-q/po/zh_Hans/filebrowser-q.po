@@ -1,33 +1,177 @@
 msgid ""
 msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
-"Project-Id-Version: PACKAGE VERSION\n"
-"Last-Translator: Automatically generated\n"
-"Language-Team: none\n"
-"Language: zh-Hans\n"
+"Project-Id-Version: luci-app-filebrowser-q\n"
+"Last-Translator: kiddin9\n"
+"Language-Team: Chinese (Simplified)\n"
+"Language: zh_Hans\n"
 "MIME-Version: 1.0\n"
 "Content-Transfer-Encoding: 8bit\n"
 
+msgid "0.0.0.0 (All interfaces)"
+msgstr "0.0.0.0 (所有接口)"
+
+msgid "127.0.0.1 (Localhost only)"
+msgstr "127.0.0.1 (仅本机回环)"
+
+msgid ":: (IPv6 & dual-stack)"
+msgstr ":: (IPv6 与双栈接口)"
+
+msgid "Additional directories"
+msgstr "附加存储目录"
+
+msgid "Admin password"
+msgstr "管理员密码"
+
+msgid "Admin username"
+msgstr "管理员用户名"
+
+msgid "Authentication mode"
+msgstr "认证模式"
+
+msgid "Automatically allow incoming WAN TCP traffic to the listen port."
+msgstr "自动添加动态防火墙规则，允许外网访问监听端口。"
+
+msgid "Base URL path"
+msgstr "Web 基础路径"
+
+msgid "Basic Settings"
+msgstr "基本设置"
+
+msgid "Cache directory"
+msgstr "缓存目录"
+
+msgid "Cache max size (MB)"
+msgstr "最大缓存大小 (MB)"
+
+msgid "Changes here are saved only when \"Use custom YAML configuration\" is enabled."
+msgstr "仅当勾选上方“使用自定义 YAML 配置”时，此处修改才会在保存时生效。"
+
+msgid "Choose 127.0.0.1 when running behind a local reverse proxy."
+msgstr "配合本机反向代理使用时建议选择 127.0.0.1。"
+
+msgid "Clear this field after initial login if you want password changes made in the Web UI to persist across restarts."
+msgstr "若希望在 Web 界面修改密码后重启不被重置，可在完成初始化后清空此项。"
+
 msgid "Collecting data..."
-msgstr "正在收集数据中..."
+msgstr "正在收集数据..."
+
+msgid "Configuration YAML (/etc/filebrowser-q/config.yaml)"
+msgstr "YAML 配置文件 (/etc/filebrowser-q/config.yaml)"
+
+msgid "Custom Config"
+msgstr "自定义配置"
+
+msgid "Database file path"
+msgstr "数据库文件路径"
 
 msgid "Default login username is %s and password is %s."
 msgstr "默认登录用户名为 %s，密码为 %s。"
 
+msgid "Disable image, video, and document thumbnail generation to reduce CPU and RAM usage on low-end devices."
+msgstr "关闭图片、视频和文档缩略图生成，以降低低配设备的 CPU 与内存占用。"
+
+msgid "Disable thumbnails"
+msgstr "禁用缩略图预览"
+
 msgid "Enable"
 msgstr "启用"
+
+msgid "Enable HTTPS (TLS)"
+msgstr "启用 HTTPS (TLS)"
+
+msgid "Enable when running behind Nginx, Caddy, or Lucky to honor X-Forwarded-* headers."
+msgstr "部署在 Nginx、Caddy 或 Lucky 反代后方时开启，用于识别真实客户端 IP 与协议。"
+
+msgid "FileBrowser Quantum"
+msgstr "FileBrowser Quantum"
+
+msgid "Filename \"database.db\" is reserved for v1 migration; use \"filebrowser.sqlite\" instead."
+msgstr "文件名“database.db”仅保留用于旧版迁移，请改用“filebrowser.sqlite”。"
+
+msgid "Grant UCI and file access for luci-app-filebrowser-q"
+msgstr "授予 luci-app-filebrowser-q 访问 UCI 配置与日志的权限"
+
+msgid "Invalid format. Use /path, /path:Name, or /path:Name:ro."
+msgstr "格式无效，请使用 /路径、/路径:名称 或 /路径:名称:ro。"
+
+msgid "Keep manual edits to /etc/filebrowser-q/config.yaml without overwriting from UCI options above (for OIDC, OnlyOffice, or advanced rules)."
+msgstr "保留对 /etc/filebrowser-q/config.yaml 的手动编辑而不被上方选项覆盖（适用于 OIDC、OnlyOffice 或复杂规则）。"
+
+msgid "Listen address"
+msgstr "监听地址"
 
 msgid "Listen port"
 msgstr "监听端口"
 
+msgid "Maximum disk space used by thumbnail previews (0 = unlimited)."
+msgstr "缩略图预览缓存允许占用的最大空间（0 表示不限制）。"
+
+msgid "Modern self-hosted web file manager with multi-source storage, indexed search, WebDAV, and rich previews."
+msgstr "现代化自托管 Web 文件管理器，支持多存储源、实时索引搜索、WebDAV 与多媒体预览。"
+
+msgid "Move to external storage (for example /mnt/sda1/filebrowser-q/filebrowser.sqlite) if router flash space is limited."
+msgstr "若路由器闪存空间较小，建议迁移至外置存储（如 /mnt/sda1/filebrowser-q/filebrowser.sqlite）。"
+
 msgid "NOT RUNNING"
 msgstr "未运行"
+
+msgid "No authentication (Trusted LAN only)"
+msgstr "免密直接访问 (仅限受信任内网)"
+
+msgid "No log entries found."
+msgstr "暂无运行日志记录。"
 
 msgid "Open Web Interface"
 msgstr "打开 Web 界面"
 
+msgid "Open firewall port"
+msgstr "开放防火墙端口"
+
+msgid "Optional extra storage sources. Format: /path, /path:Name, or /path:Name:ro (read-only)."
+msgstr "挂载其他目录作为独立存储源。格式：/路径、/路径:显示名称 或 /路径:显示名称:ro（只读）。"
+
+msgid "Password authentication"
+msgstr "账号密码认证"
+
+msgid "Password cannot be \"admin\"; enter at least 5 characters."
+msgstr "密码不能设为“admin”，请输入其他不少于 5 位的密码。"
+
+msgid "Password length must be at least 5 characters."
+msgstr "密码长度不能少于 5 个字符。"
+
+msgid "Path must start with \"/\"."
+msgstr "路径必须以“/”开头。"
+
+msgid "Primary storage path (for example / or /mnt/sda1)."
+msgstr "主存储目录路径（例如 / 或 /mnt/sda1）。"
+
 msgid "RUNNING"
 msgstr "运行中"
 
+msgid "Refresh Logs"
+msgstr "刷新日志"
+
 msgid "Root directory"
-msgstr "根目录"
+msgstr "主存储目录"
+
+msgid "Service Logs"
+msgstr "运行日志"
+
+msgid "Stores thumbnails, search index, and archive temp files. Point to disk storage when downloading large folders."
+msgstr "用于存放缩略图、搜索索引及打包临时文件；打包下载大目录时建议改设到磁盘路径。"
+
+msgid "Subpath prefix when behind a reverse proxy (for example /files)."
+msgstr "通过反向代理子路径访问时的前缀（例如 /files）。"
+
+msgid "TLS certificate path"
+msgstr "TLS 证书路径"
+
+msgid "TLS private key path"
+msgstr "TLS 私钥路径"
+
+msgid "Trust reverse-proxy headers"
+msgstr "信任反向代理请求头"
+
+msgid "Use custom YAML configuration"
+msgstr "使用自定义 YAML 配置"

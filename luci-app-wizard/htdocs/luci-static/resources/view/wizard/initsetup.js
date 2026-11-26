@@ -135,7 +135,7 @@ return view.extend({
 			ipv6: uci.get('network', 'wan6', 'auto') === '0' ? '0' : '1',
 			https: uci.get('wizard', 'default', 'https') || '0',
 			persistent_cookies: uci.get('luci', 'main', 'persistent_cookies') || '1',
-			landing_page: uci.get('luci', 'main', 'landing_page') || 'auto',
+			landing_page: uci.get('luci', 'main', 'landing_page') || '',
 			autoupgrade_fm: uci.get('luci', 'main', 'autoupgrade_fm') || '0',
 			coremark: uci.get('wizard', 'default', 'coremark') || '0',
 			wifi_ssid: baseSsid || (this.hasWireless ? 'Kwrt' : ''),
@@ -194,8 +194,18 @@ return view.extend({
 			{ tab: 'firmware', type: form.Flag, id: 'coremark', title: _('Run CoreMark on Boot'), desc: _('Run CPU benchmark asynchronously upon router initialization.') },
 			{ tab: 'firmware', type: form.Flag, id: 'persistent_cookies', title: _('Persistent Cookie Session'), desc: _('Maintain persistent login sessions in the web browser.') },
 			{ tab: 'firmware', type: form.Flag, id: 'https', title: _('Enforce HTTPS Access'), desc: _('Automatically redirect HTTP requests to secure HTTPS.') },
-			{ tab: 'firmware', type: form.ListValue, id: 'landing_page', title: _('Landing Dashboard Mode'),
-			  choices: { 'auto': _('Auto'), 'overview': _('Overview'), 'istoreos': _('iStoreOS'), 'dashboard': _('Dashboard'), routerdog: _('RouterDog'), nas: _('NAS'), 'next-nas': _('Next-NAS'), router: _('Router') } }
+			{ tab: 'firmware', type: form.Value, id: 'landing_page', title: _('Landing Dashboard Mode'),
+				choices: {
+					'': _('Auto'),
+					'status/overview': _('Overview'),
+					'quickstart': _('iStoreOS'),
+					'status/dashboard': _('Dashboard'),
+					'routerdog': _('RouterDog'),
+					'istorex/nas': _('NAS'),
+					'istorex/next-nas': _('Next-NAS'),
+					'istorex/router': _('Router')
+				}
+			}
 		];
 
 		// 无线配置根据设备硬件动态追加
@@ -293,6 +303,11 @@ return view.extend({
 				}
 			});
 			cur.lan_dns = toArray(cur.lan_dns);
+			cur.landing_page = cur.landing_page.trim()
+				.replace(/[?#].*$/, '')
+				.replace(/^.*?\/?cgi-bin\/luci(?:\/?;stok=[^/]+)?|^https?:\/\/[^/]+/i, '')
+				.replace(/\/+/g, '/').replace(/^\/|\/$/g, '')
+				.replace(/^admin(?:\/|$)/i, '');
 
 			// 精准筛选出发生变化的常规字段
 			var changed = self.fields.map(function(f) { return f.id; }).filter(function(id) {
@@ -526,10 +541,10 @@ return view.extend({
 				// 1. 核心操作：调用 apply_unchecked，进行强制永久提交，彻底绕过 90 秒回滚保护机制！
 				L.post(L.url('admin', 'uci', 'apply_unchecked')).catch(function() {});
 
-				// 2. 立即在前端呼出弹窗遮罩层
+				// 2. 立即在前端呼出弹窗遮罩层（剥离 _() 内首尾空格以防 po2lmo 截断导致匹配失效）
 				ui.showModal(_('LAN IP Address Changed'), [
-					E('p', {}, [_('LAN IP has been changed to '), E('strong', {}, newIp), '.']),
-					E('p', {}, [_('Applying changes without rollback. Redirecting to the new address in '), countSpan, _(' seconds...')]),
+					E('p', {}, [_('LAN IP has been changed to'), ' ', E('strong', {}, newIp), '.']),
+					E('p', {}, [_('Applying changes without rollback. Redirecting to the new address in'), ' ', countSpan, ' ', _('seconds...')]),
 					E('p', { 'class': 'alert-message notice', 'style': 'margin-top: 1em;' },
 						_('提示：更改网段后，若未能自动加载新页面，请尝试重新插拔网线或断开重连 Wi-Fi，以获取新网段的 IP 地址。')),
 					E('div', { 'class': 'spinning', 'style': 'margin: 1.5em auto;' }),

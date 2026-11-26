@@ -14,11 +14,42 @@ const callServiceList = rpc.declare({
 	expect: { '': {} }
 });
 
+function formatBytes(bytes) {
+	if (!bytes || bytes <= 0) return '0 B';
+	const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+	let i = Math.floor(Math.log(bytes) / Math.log(1024));
+	if (i >= units.length) i = units.length - 1;
+	return (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : (i === 1 ? 1 : 2)) + ' ' + units[i];
+}
+
+function formatSpeed(bps) {
+	if (!bps || bps <= 0) return '0 B/s';
+	return formatBytes(bps) + '/s';
+}
+
+function formatUptime(sec) {
+	if (!sec || sec <= 0) return '0s';
+	sec = Math.floor(sec);
+	let m = Math.floor(sec / 60);
+	let s = sec % 60;
+	if (m === 0) return s + 's';
+	let h = Math.floor(m / 60);
+	m = m % 60;
+	if (h === 0) return m + 'm ' + s + 's';
+	return h + 'h ' + m + 'm';
+}
+
 function getServiceStatus() {
-	return L.resolveDefault(callServiceList('xkcptun'), {}).then(function (res) {
+	return Promise.all([
+		L.resolveDefault(callServiceList('xkcptun'), {}),
+		L.resolveDefault(fs.exec_direct('/usr/bin/xkcp_spy', ['-c', 'json']), '')
+	]).then(function (results) {
+		let res = results[0];
+		let spyOut = results[1];
 		let status = {
 			client: null,
-			server: null
+			server: null,
+			stats: null
 		};
 		try {
 			let instances = res['xkcptun']['instances'];
@@ -29,31 +60,138 @@ function getServiceStatus() {
 				status.server = instances['server']['pid'];
 			}
 		} catch (e) {}
+
+		if (typeof spyOut === 'string' && spyOut.trim()) {
+			try {
+				status.stats = JSON.parse(spyOut.trim());
+			} catch (e) {}
+		}
 		return status;
 	});
 }
 
 function renderStatus(status) {
-	let clientBadge = status.client
-		? E('em', {}, [
-			E('span', { 'style': 'color:green;' }, [
-				E('strong', {}, _('RUNNING') + ' (PID ' + status.client + ')')
-			])
-		  ])
-		: E('em', {}, [
-			E('span', { 'style': 'color:grey;' }, [
-				E('strong', {}, _('NOT RUNNING'))
-			])
-		  ]);
+	let stats = status.stats || {};
+	let totalTunnels = stats.num_tunnels || (stats.tunnels ? stats.tunnels.length : 0);
+	let activeConns = stats.active_conns || 0;
+	let totalConns = stats.total_conns || 0;
+	let bytesIn = stats.bytes_in || 0;
+	let bytesOut = stats.bytes_out || 0;
+	let totalBytes = bytesIn + bytesOut;
+	let rxRate = stats.rx_rate_bps || 0;
+	let txRate = stats.tx_rate_bps || 0;
 
-	return E('div', { 'class': 'cbi-map' },
-		E('fieldset', { 'class': 'cbi-section' }, [
-			E('p', {}, [
-				E('strong', {}, _('Client Daemon') + ': '),
-				clientBadge
-			])
-		])
-	);
+	let clientRunning = !!status.client;
+	let svcBadge = E('span', {
+		'class': 'label ' + (clientRunning ? 'success' : 'neutral'),
+		'style': 'padding: 4px 10px; border-radius: 4px; font-weight: bold; font-size: 85%; color: #fff; background-color: ' + (clientRunning ? '#28a745' : '#6c757d') + ';'
+	}, clientRunning ? (_('运行中') + (status.client ? (' (PID ' + status.client + ')') : '')) : _('未运行'));
+
+	let headerBar = E('div', { 'style': 'display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px;' }, [
+		E('div', { 'style': 'display: flex; align-items: center; gap: 12px;' }, [
+			E('h3', { 'style': 'margin: 0; font-size: 16px; font-weight: 600;' }, _('服务运行状态')),
+			svcBadge
+		]),
+		E('div', { 'style': 'color: #888; font-size: 12px;' }, _('每 3 秒自动轮询刷新'))
+	]);
+
+	function createKpiCard(title, icon, value, color, subText, isHero) {
+		return E('div', {
+			'class': 'xkcp-kpi-card' + (isHero ? ' hero' : '')
+		}, [
+			E('div', { 'class': 'xkcp-kpi-header' }, [
+				E('span', { 'class': 'xkcp-kpi-title' }, title),
+				E('span', { 'class': 'xkcp-kpi-icon' }, icon)
+			]),
+			E('div', { 'class': 'xkcp-kpi-val', 'style': 'color: ' + color + ';' }, value),
+			subText ? E('div', { 'class': 'xkcp-kpi-sub' }, subText) : ''
+		]);
+	}
+
+	let kpiGrid = E('div', { 'class': 'xkcp-kpi-grid' }, [
+		createKpiCard(_('加速通道总流量'), '🚀', formatBytes(totalBytes), '#0891b2', _('KCP 双向加速累计吞吐'), true),
+		createKpiCard(_('下行加速流量'), '📥', formatBytes(bytesOut), '#10b981', (txRate > 0 ? (_('实时流速') + ': ' + formatSpeed(txRate)) : _('接收下行吞吐'))),
+		createKpiCard(_('上行传输流量'), '📤', formatBytes(bytesIn), '#3b82f6', (rxRate > 0 ? (_('实时流速') + ': ' + formatSpeed(rxRate)) : _('发送上行吞吐'))),
+		createKpiCard(_('此刻加速连接'), '⚡', String(activeConns), '#f59e0b', _('累计处理') + ' ' + String(totalConns) + ' ' + _('连接')),
+		createKpiCard(_('全链路加速隧道'), '🚇', String(totalTunnels) + ' ' + _('条'), '#8b5cf6', _('KCP 多路复用隧道'))
+	]);
+
+	// Collect active sessions across all tunnels
+	let sessionRows = [];
+	if (stats.tunnels && Array.isArray(stats.tunnels)) {
+		stats.tunnels.forEach(function(t) {
+			if (!t.sessions || !Array.isArray(t.sessions)) return;
+			t.sessions.forEach(function(s) {
+				let protoTag = (s.proto || t.proto || 'tcp').toUpperCase();
+				let clientAddr = (s.client_host || '127.0.0.1') + (s.client_port ? ':' + s.client_port : '');
+				let targetAddr = (s.target_host || '127.0.0.1') + (s.target_port ? ':' + s.target_port : '');
+				let rttText = s.rtt_ms ? (s.rtt_ms + ' ms') : '-';
+				let rttColor = (s.rtt_ms && s.rtt_ms < 150) ? '#10b981' : ((s.rtt_ms && s.rtt_ms < 300) ? '#f59e0b' : '#6b7280');
+
+				sessionRows.push(E('tr', { 'class': 'tr' }, [
+					E('td', { 'class': 'td', 'style': 'font-weight: 600;' }, clientAddr),
+					E('td', { 'class': 'td', 'style': 'font-family: monospace;' }, targetAddr),
+					E('td', { 'class': 'td' }, [
+						E('span', {
+							'style': 'display: inline-block; padding: 2px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; background: rgba(99, 102, 241, 0.1); color: #6366f1;'
+						}, t.name + ' (' + protoTag + ')')
+					]),
+					E('td', { 'class': 'td' }, formatBytes(s.bytes_out) + (s.tx_rate_bps > 0 ? (' · ' + formatSpeed(s.tx_rate_bps)) : '')),
+					E('td', { 'class': 'td' }, formatBytes(s.bytes_in) + (s.rx_rate_bps > 0 ? (' · ' + formatSpeed(s.rx_rate_bps)) : '')),
+					E('td', { 'class': 'td' }, [
+						E('span', {
+							'style': 'display: inline-block; padding: 2px 6px; font-size: 11px; font-weight: 600; border-radius: 4px; background: rgba(16, 185, 129, 0.1); color: ' + rttColor + ';'
+						}, rttText)
+					]),
+					E('td', { 'class': 'td', 'style': 'color: #6b7280; font-size: 12px;' }, formatUptime(s.uptime))
+				]));
+			});
+		});
+	}
+
+	let headerRow = E('tr', { 'class': 'tr table-titles' }, [
+		E('th', { 'class': 'th', 'style': 'text-align: left;' }, _('客户端地址')),
+		E('th', { 'class': 'th', 'style': 'text-align: left;' }, _('目标服务器')),
+		E('th', { 'class': 'th', 'style': 'text-align: left;' }, _('所属隧道')),
+		E('th', { 'class': 'th', 'style': 'text-align: left;' }, _('下行加速流量')),
+		E('th', { 'class': 'th', 'style': 'text-align: left;' }, _('上行传输流量')),
+		E('th', { 'class': 'th', 'style': 'text-align: left;' }, _('往返时延 (RTT)')),
+		E('th', { 'class': 'th', 'style': 'text-align: left;' }, _('持续时间'))
+	]);
+
+	let tableRows = [ headerRow ];
+	if (sessionRows.length > 0) {
+		tableRows = tableRows.concat(sessionRows);
+	} else {
+		tableRows.push(E('tr', { 'class': 'tr placeholder' }, [
+			E('td', { 'class': 'td', 'style': 'text-align: center; padding: 25px 10px; color: #9ca3af;', 'colspan': '7' },
+				E('em', {}, _('暂无活跃加速连接（当局域网客户端发起分流流量或端口转发访问时将实时显示）'))
+			)
+		]));
+	}
+
+	let sessionTable = E('div', { 'style': 'overflow-x: auto; margin-top: 10px;' }, [
+		E('table', { 'class': 'table', 'style': 'width: 100%; border-collapse: collapse;' }, tableRows)
+	]);
+
+	let sessionSection = E('div', { 'class': 'cbi-section', 'style': 'margin-top: 25px;' }, [
+		E('h3', { 'style': 'margin: 0 0 6px 0; font-size: 15px; font-weight: 600;' }, [
+			_('此刻正在加速的连接'),
+			' (',
+			String(sessionRows.length),
+			')'
+		]),
+		E('p', { 'class': 'cbi-section-descr', 'style': 'margin-bottom: 10px;' },
+			_('当局域网客户端发起分流流量或通过端口转发访问时，将实时动态呈现连接会话明细。')
+		),
+		sessionTable
+	]);
+
+	return E('div', { 'class': 'xkcp-status-panel' }, [
+		headerBar,
+		kpiGrid,
+		sessionSection
+	]);
 }
 
 const modeProfiles = [
@@ -304,7 +442,30 @@ return view.extend({
 		m = new form.Map('xkcptun');
 		m.tabbed = true;
 
-		// ===== Tab 1: Client Global Default Settings =====
+		// ===== Tab 1: Service Status Overview =====
+		let s_status = m.section(form.NamedSection, '_status', 'status', _('Service Status'),
+			_('Real-time connection telemetry, throughput metrics, and active accelerated sessions.'));
+		s_status.anonymous = true;
+		s_status.addremove = false;
+		s_status.load = function() { return Promise.resolve(); };
+		s_status.parse = function() { return Promise.resolve(); };
+		s_status.render = function() {
+			let statusDiv = E('div', { 'id': 'service_status', 'style': 'margin-top: 10px;' }, [
+				E('em', { 'class': 'spinning' }, _('Collecting status ...'))
+			]);
+			return Promise.resolve(E('div', {
+				'class': 'cbi-section',
+				'data-tab': 'status',
+				'data-tab-title': _('Service Status')
+			}, [
+				E('div', { 'class': 'cbi-section-descr' },
+					_('Real-time connection telemetry, throughput metrics, and active accelerated sessions.')
+				),
+				statusDiv
+			]));
+		};
+
+		// ===== Tab 2: Client Global Default Settings =====
 		s = m.section(form.NamedSection, 'client', 'global', _('Client Global Settings'),
 			_('Common connection parameters and KCP profile inherited by all client tunnels.'));
 		s.anonymous = false;
@@ -520,17 +681,106 @@ return view.extend({
 			let customStyle = E('style', {}, [
 				'.cbi-tblsection { overflow-x: auto !important; }',
 				'.cbi-section-table .cbi-section-actions { white-space: nowrap !important; text-align: right !important; min-width: 140px !important; width: 1% !important; }',
-				'.cbi-section-table .cbi-section-actions > div { display: inline-flex !important; align-items: center !important; justify-content: flex-end !important; gap: 4px !important; }'
+				'.cbi-section-table .cbi-section-actions > div { display: inline-flex !important; align-items: center !important; justify-content: flex-end !important; gap: 4px !important; }',
+				'.xkcp-kpi-grid {',
+				'    display: grid;',
+				'    grid-template-columns: repeat(5, minmax(0, 1fr));',
+				'    gap: 12px;',
+				'    margin: 15px 0 25px 0;',
+				'}',
+				'.xkcp-kpi-card {',
+				'    background: var(--cbi-section-bg, #fff);',
+				'    border: 1px solid var(--cbi-section-border, rgba(0, 0, 0, 0.08));',
+				'    border-radius: 10px;',
+				'    padding: 14px 16px;',
+				'    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);',
+				'    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;',
+				'    display: flex;',
+				'    flex-direction: column;',
+				'    justify-content: space-between;',
+				'    min-height: 86px;',
+				'    box-sizing: border-box;',
+				'}',
+				'.xkcp-kpi-card:hover {',
+				'    transform: translateY(-2px);',
+				'    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);',
+				'}',
+				'.xkcp-kpi-header {',
+				'    display: flex;',
+				'    align-items: center;',
+				'    justify-content: space-between;',
+				'    font-size: 13px;',
+				'    color: var(--cbi-descr-color, #666);',
+				'    margin-bottom: 6px;',
+				'    white-space: nowrap;',
+				'}',
+				'.xkcp-kpi-title {',
+				'    font-weight: 500;',
+				'}',
+				'.xkcp-kpi-icon {',
+				'    font-size: 16px;',
+				'    line-height: 1;',
+				'    opacity: 0.85;',
+				'}',
+				'.xkcp-kpi-val {',
+				'    font-size: 24px;',
+				'    font-weight: 700;',
+				'    line-height: 1.2;',
+				'    letter-spacing: -0.3px;',
+				'}',
+				'.xkcp-kpi-sub {',
+				'    font-size: 11px;',
+				'    color: #999;',
+				'    margin-top: 3px;',
+				'    white-space: nowrap;',
+				'    overflow: hidden;',
+				'    text-overflow: ellipsis;',
+				'}',
+				'@media screen and (max-width: 1080px) {',
+				'    .xkcp-kpi-grid {',
+				'        grid-template-columns: repeat(4, 1fr);',
+				'    }',
+				'    .xkcp-kpi-card.hero {',
+				'        grid-column: span 4;',
+				'        background: linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%);',
+				'        border-color: rgba(6, 182, 212, 0.25);',
+				'        padding: 16px 20px;',
+				'    }',
+				'    .xkcp-kpi-card.hero .xkcp-kpi-val {',
+				'        font-size: 28px;',
+				'    }',
+				'}',
+				'@media screen and (max-width: 720px) {',
+				'    .xkcp-kpi-grid {',
+				'        grid-template-columns: repeat(2, 1fr);',
+				'        gap: 10px;',
+				'    }',
+				'    .xkcp-kpi-card.hero {',
+				'        grid-column: span 2;',
+				'    }',
+				'    .xkcp-kpi-card {',
+				'        padding: 12px;',
+				'        min-height: 76px;',
+				'    }',
+				'    .xkcp-kpi-val {',
+				'        font-size: 20px;',
+				'    }',
+				'    .xkcp-kpi-header {',
+				'        font-size: 12px;',
+				'    }',
+				'}'
 			]);
 
 			document.addEventListener('cbi-tab-active', function() {
 				window.dispatchEvent(new Event('resize'));
 			});
 
-			let statusEl = E('fieldset', { 'class': 'cbi-section', 'style': 'margin-bottom: 15px;' }, [
-				E('legend', {}, _('Service Status')),
-				E('div', { 'id': 'service_status' }, _('Collecting status ...'))
-			]);
+			getServiceStatus().then(function(status) {
+				let view = document.getElementById('service_status');
+				if (view) {
+					dom.content(view, renderStatus(status));
+				}
+			});
 
 			L.Poll.add(function () {
 				return L.resolveDefault(getServiceStatus(), {}).then(function(status) {
@@ -547,7 +797,6 @@ return view.extend({
 				E('div', { 'class': 'cbi-map-descr' },
 					_('xkcptun is a high-performance C implementation of kcptun with dynamic destination multi-tunnel unified daemon architecture.')
 				),
-				statusEl,
 				mapNode
 			]);
 		});

@@ -10,9 +10,200 @@ import type { LanSettings } from '../types/lan';
 import type { SafeShieldStatistics, SafeShieldStatus } from '../types/safeshield';
 import type { SmartSafeHubStatus } from '../types/status';
 import type { SoftwareUpdateStatus } from '../types/updates';
+import type { DeviceRegistrationStatus } from '../api/smartsafehub';
+import type { AppsCatalog, AppsInstallStatus, AppsMetrics } from '../types/apps';
+import type { NetwatchStatus } from '../types/netwatch';
+import type { JarbisCandidate, JarbisDevice, JarbisLightState, JarbisStatus, JarbisSensorState } from '../types/jarbis';
 
 const now = Math.floor(Date.now() / 1000);
 const hour = 3600;
+
+// Demo-only account status: no user, device credential, pairing token or live Hub session.
+export const demoAccount: DeviceRegistrationStatus = {
+  schema: 1,
+  component: 'device',
+  phase: 'registered',
+  lastResult: 'success',
+  lastErrorCode: null,
+  accountRegistered: true,
+  plan: 'free',
+  pairingCode: null,
+  pairingExpiresAt: null,
+  nextSyncAt: 0,
+  lastSuccessAt: now - 300,
+};
+
+// Demo-only catalog. Versions are representative release examples, not live Hub approvals.
+// No APK URLs or authenticated API responses are used.
+export const demoApps: AppsCatalog = {
+  schema: 1,
+  deviceCode: 'iptime-ax3000sm',
+  firmwareBuildId: 'demo-build',
+  channel: 'stable',
+  apps: [
+    {
+      id: 'jarbis',
+      name: 'Jarbis',
+      summary: '로컬 Wi-Fi 스마트 전구와 온습도 센서를 관리합니다.',
+      description: 'SmartSafeHub 공식 스마트홈 엔진으로 지원 전구와 온습도 센서를 연결합니다.',
+      category: 'iot',
+      publisherType: 'first_party',
+      developerName: 'SmartSafeHub Contributors',
+      version: '0.2.4-r1',
+      webUi: { type: 'smartsafehub', path: '#smarthome' },
+    },
+    {
+      id: 'arcdrop',
+      name: 'ArcDrop',
+      summary: '같은 Wi-Fi 네트워크의 기기로 파일을 직접 전송합니다.',
+      description: 'SmartSafeHub 공식 LAN 전용 파일 전송 앱입니다. 기기 간 직접 전송하며 신뢰할 수 있는 HTTPS 연결이 필요합니다.',
+      category: 'utilities',
+      publisherType: 'first_party',
+      developerName: 'SmartSafeHub Contributors',
+      version: '0.1.0-r21',
+      webUi: { type: 'static', path: '/arcdrop/' },
+    },
+    {
+      id: 'retro-arcade',
+      name: '레트로 아케이드',
+      summary: '브라우저에서 레트로 게임을 즐기는 엔터테인먼트 앱입니다.',
+      description: '사용자가 직접 준비한 게임 파일로 즐기는 레트로 아케이드입니다.',
+      category: 'entertainment',
+      publisherType: 'first_party',
+      developerName: 'SmartSafeHub contributors',
+      version: '1.2.0-r4',
+      webUi: { type: 'static', path: '/retro-arcade/' },
+    },
+    {
+      id: 'network-usage-monitor',
+      name: '네트워크 사용량 모니터',
+      summary: '기기별 네트워크 사용량과 통계를 확인하는 앱입니다.',
+      description: '네트워크 트래픽을 모니터링합니다.',
+      category: 'network',
+      publisherType: 'third_party',
+      developerName: 'Jo-Philipp Wich',
+      version: '2025.06.02~29236be6-r1',
+      webUi: null,
+    },
+    {
+      id: 'travelmate',
+      name: 'Travelmate',
+      summary: '호텔·카페 Wi-Fi를 공유기에서 연결하고 관리합니다.',
+      description: '다른 Wi-Fi에 연결하고 저장된 Wi-Fi에 자동으로 재연결합니다. 설치 후 연결 설정이 필요합니다.',
+      category: 'network',
+      publisherType: 'third_party',
+      developerName: 'Dirk Brenken / OpenWrt LuCI community',
+      version: '2.4.9-r5',
+      webUi: null, // Demo never exposes actual LuCI administration routes.
+    },
+    {
+      id: 'wake-on-lan',
+      name: 'Wake-on-LAN',
+      summary: '공유기에서 PC와 홈서버의 전원을 켤 수 있는 도구입니다.',
+      description: 'Wake-on-LAN 지원 컴퓨터를 네트워크에서 깨우는 앱입니다.',
+      category: 'utilities',
+      publisherType: 'third_party',
+      developerName: 'OpenWrt LuCI community / etherwake contributors',
+      version: '26.288.56989~75a306d',
+      webUi: null, // Public demo must never link to an actual LuCI control page.
+    },
+  ],
+};
+
+export const demoAppsStatus: AppsInstallStatus = {
+  job: { phase: 'idle', action: '', appId: '', code: 'NONE' },
+  installed: {
+    jarbis: {
+      installed: true,
+      partial: false,
+      managed: true,
+      updateAvailable: false,
+      installedVersion: '0.2.4-r1',
+      webUiReady: true,
+    },
+    arcdrop: {
+      installed: true,
+      partial: false,
+      managed: true,
+      updateAvailable: false,
+      installedVersion: '0.1.0-r21',
+      webUiReady: true,
+    },
+    'retro-arcade': {
+      installed: true,
+      partial: false,
+      managed: true,
+      updateAvailable: true,
+      installedVersion: '1.0.0-r1',
+      webUiReady: true,
+    },
+    'network-usage-monitor': {
+      installed: true,
+      partial: false,
+      managed: true,
+      updateAvailable: false,
+      installedVersion: '2025.06.02~29236be6-r1',
+      webUiReady: false,
+    },
+    'travelmate': {
+      installed: true,
+      partial: false,
+      managed: true,
+      updateAvailable: false,
+      installedVersion: '2.4.9-r5',
+      webUiReady: false,
+    },
+    'wake-on-lan': {
+      installed: true,
+      partial: false,
+      managed: true,
+      updateAvailable: false,
+      installedVersion: '26.288.56989~75a306d',
+      webUiReady: false,
+    },
+  },
+};
+
+export const demoAppsMetrics: AppsMetrics = {
+  storage: { mount: '/overlay', totalBytes: 256 * 1024 * 1024, availableBytes: 185 * 1024 * 1024 },
+  // Installed APK metadata; neither app cache nor runtime data is included.
+  installedSizes: { arcdrop: 131072, jarbis: 215040, 'retro-arcade': 1394688, 'network-usage-monitor': 117760, travelmate: 285696, 'wake-on-lan': 65536 },
+};
+
+// Fictional Tasmota devices: reserved addresses, no credentials or real broker.
+export const demoJarbisStatus: JarbisStatus = {
+  apiVersion: 1, version: '0.2.4-r1', enabled: true, mqttConfigured: true,
+  brokerMode: 'managed', brokerHost: '192.0.2.1', brokerPort: '1883', brokerReady: true, features: { shellyHtg3: true, shellyQuickPair: true, rooms: true },
+};
+export const demoJarbisDevices: { devices: JarbisDevice[] } = {
+  devices: [
+    { id: 'tasmota_demo_living', name: '거실 전구', kind: 'light', protocol: 'tasmota',
+      topic: 'demo_living', enabled: true, capabilities: ['power', 'brightness', 'color', 'color_temperature'] },
+    { id: 'tasmota_demo_bedroom', name: '침실 전구', kind: 'light', protocol: 'tasmota',
+      topic: 'demo_bedroom', enabled: true, capabilities: ['power', 'brightness', 'color_temperature'] },
+    { id: 'shelly_demo_study', name: '서재 온습도', kind: 'sensor', protocol: 'shelly_htg3',
+      topic: 'shellyhtg3-demo00000001', enabled: true, capabilities: ['temperature', 'humidity', 'battery'] },
+  ],
+};
+export const demoJarbisCandidates: { devices: JarbisCandidate[] } = {
+  devices: [
+    { protocol: 'tasmota', source: 'http', ip: '192.0.2.203', mac: '02:00:00:00:00:13',
+      topic: 'demo_kitchen', name: '주방 전구', registered: false },
+    { protocol: 'shelly_htg3', kind: 'sensor', source: 'mqtt', ip: '192.0.2.205', mac: '02:00:00:00:00:15',
+      topic: 'shellyhtg3-demo00000002', name: '거실 온습도', registered: false },
+  ],
+};
+export const demoJarbisSensorStates: Record<string, JarbisSensorState> = {
+  shelly_demo_study: { id: 'shelly_demo_study', observed: true, source: 'mqtt',
+    temperatureC: 23.4, humidityPercent: 51, batteryPercent: 85, lastSeen: now - 360 },
+};
+
+export const demoJarbisLightStates: Record<string, JarbisLightState> = {
+  tasmota_demo_living: { id: 'tasmota_demo_living', observed: true, source: 'mqtt',
+    power: 'ON', brightness: 72, color: '#f5d6a1', colorTemperature: 370 },
+  tasmota_demo_bedroom: { id: 'tasmota_demo_bedroom', observed: true, source: 'mqtt',
+    power: 'OFF', brightness: 30, color: null, colorTemperature: 400 },
+};
 
 export const demoDevices: ConnectedDevicesSummary = {
   generatedAt: now,
@@ -29,6 +220,7 @@ export const demoActivity: ActivityHistory = {
   schema: 1, scope: 'current_boot', volatile: true, maxEvents: 100,
   cloud: { enabled: false, phase: 'disabled', eligible: false, plan: 'free', retentionDays: 0, pendingEvents: 0, lastAttemptAt: 0, lastSuccessAt: 0, lastUploadedCount: 0, lastErrorCode: null, nextSyncAt: 0 },
   events: [
+    { schema: 1, eventId: 'demo-network-warning', eventType: 'network_watch.anomaly.warning', severity: 'warning', occurredAt: now - 900, deviceUuid: null, source: 'network_watch', metadata: { source_ip: '192.0.2.101', connections: 128, destinations: 42 } },
     { schema: 1, eventId: 'demo-event-1', eventType: 'safeshield.blocklist.updated', severity: 'success', occurredAt: now - 7200, deviceUuid: null, source: 'safeshield', metadata: {} },
     { schema: 1, eventId: 'demo-event-2', eventType: 'system.boot', severity: 'info', occurredAt: now - 86400, deviceUuid: null, source: 'system', metadata: {} },
   ],
@@ -37,7 +229,7 @@ export const demoActivity: ActivityHistory = {
 export const demoStatus: SmartSafeHubStatus = {
   device: { hostname: 'SmartRouter', model: 'ipTIME AX3000SM', boardName: 'iptime,ax3000sm' },
   software: { distribution: 'OpenWrt', version: '25.12', revision: 'demo', kernel: '6.12' },
-  runtime: { uptime: 86400, localtime: now, load: [0.08, 0.12, 0.05], memory: { total: 268435456, free: 83886080, shared: 4194304, buffered: 41943040, available: 171966464, cached: 41943040 } },
+  runtime: { uptime: 86400, localtime: now, load: [0.08, 0.12, 0.05], memory: { total: 268435456, free: 83886080, shared: 4194304, buffered: 41943040, available: 171966464, cached: 41943040 }, storage: demoAppsMetrics.storage },
   network: { available: true, up: true, protocol: 'dhcp', ipv4Address: '198.51.100.20' },
   activityHistory: demoActivity,
 };
@@ -50,7 +242,7 @@ export const demoLan: LanSettings = {
 };
 
 export const demoSafeShield: SafeShieldStatus = {
-  available: true, version: '0.3.25', enabled: true, active: true, status: 'idle', stage: null,
+  available: true, version: '0.3.28', enabled: true, active: true, status: 'idle', stage: null,
   summary: { label: '보호 중', message: 'DNS 보호가 정상적으로 동작하고 있습니다.', severity: 'info' },
   runtime: { refreshdRunning: true, dnsmasqRunning: true, dnsRuntimeOk: true, lastResult: 'success', lastErrorCode: null },
   entitlement: { plan: 'free', status: 'active' },
@@ -180,3 +372,16 @@ export const demoWifiQr = async (section: string): Promise<WifiQrCredentials> =>
 export const demoGuestWifiQr = async (): Promise<WifiQrCredentials> => ({
   ssid: 'SmartSafeHub-Guest', security: 'sae-mixed', password: 'guest-demo-only-2026',
 });
+
+// Fictional conntrack statistics, never loaded from a real router.
+export const demoNetwatch: NetwatchStatus = {
+  schema: 1, enabled: true, phase: 'ready', sampledAt: now - 35,
+  intervalSeconds: 60, source: 'conntrack', ipv4Only: true, limited: false,
+  totalConnections: 54, totalDevices: 3, alert: null,
+  trainingDays: 9, trainingTargetDays: 14, trainingReadyDevices: 2, trainingLearningDevices: 1, trainingStableDevices: 0,
+  devices: [
+    { ip: '192.0.2.101', connections: 28, destinations: 14, trainingDays: 9, baselineConnections: 80, baselineDestinations: 24, state: 'normal' },
+    { ip: '192.0.2.102', connections: 19, destinations: 11, trainingDays: 9, baselineConnections: 80, baselineDestinations: 20, state: 'normal' },
+    { ip: '192.0.2.103', connections: 7, destinations: 3, trainingDays: 3, baselineConnections: null, baselineDestinations: null, state: 'learning' },
+  ],
+};

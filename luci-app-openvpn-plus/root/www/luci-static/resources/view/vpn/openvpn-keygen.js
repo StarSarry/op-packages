@@ -91,7 +91,7 @@ const TXT = {
 		tls_key_server: _('Master Server Secret Key'),
 		tls_key_client: _('Client Key'),
 		title_main: _('OpenVPN Instance Key Generator'),
-		add_server_instance: ('Add OpenVPN Server Instance'),
+		add_server_instance: _('Add OpenVPN Server Instance'),
 		unknown_asset: _('Unknown Asset'),
 		unknown_structure: _('Unknown Structure'),
 		use_unique_name_for_each_office: _('Important: Use a unique name for each office to configure the network routing correctly.'),
@@ -231,8 +231,8 @@ const getKeyMeta = async function (keyfile, luci_app_openvpn_plus_callback) {
 	if (!res || res.length === 0) {
 		return result;
 	}
-	res = res.toUpperCase();
-	if (res.startsWith('ERROR') || res.indexOf('ERROR') !== -1 || res.startsWith('INVALID')) {
+	const resUpper = res.toUpperCase();
+	if (resUpper.startsWith('ERROR') || resUpper.indexOf('ERROR') !== -1 || resUpper.startsWith('INVALID')) {
 		return result;
 	}
 
@@ -774,10 +774,11 @@ const openAutomatedPostKeyGenModal = async function (newInstanceItem, appData, w
 	if (optionalShowBtnCancel !== true) {
 		styleHide = ' display:none !important;';
 	}
+	const backupHide = (wizardParams && wizardParams.isServerBackup) ? '' : styleHide;
 
 	const yesBtn = E('button', { 'class': 'btn cbi-button cbi-button-action important', 'style': 'margin-right:10px;' }, TXT.KEY.generate_unique_keys);
 	const noBtn = E('button', { 'class': 'btn cbi-button cbi-button-neutral', 'style': 'margin-right:10px;' }, TXT.KEY.clone_default_keys);
-	const backupBtn = E('button', { 'class': 'btn cbi-button cbi-button-positive important', 'style': 'margin-right:10px;' }, TXT.BTN.backup);
+	const backupBtn = E('button', { 'class': 'btn cbi-button cbi-button-positive important', 'style': 'margin-right:10px;' + backupHide }, TXT.BTN.backup);
 	const cancelBtn = E('button', { 'class': 'btn cbi-button cbi-button-neutral', 'style': 'margin-right:10px;' + styleHide }, TXT.BTN.cancel);
 	const closeBtn = E('button', { 'class': 'cbi-button cbi-button-action important', 'style': 'display:none;' }, TXT.BTN.close);
 
@@ -853,6 +854,7 @@ const openAutomatedPostKeyGenModal = async function (newInstanceItem, appData, w
 		yesBtn.style.display = 'none';
 		noBtn.style.display = 'none';
 		cancelBtn.style.display = 'none';
+		backupBtn.style.display = 'none';
 		promptMessageNode.style.display = 'none';
 		wizardHelperLayoutBlock.style.display = 'none';
 		progressTextArea.style.display = 'block';
@@ -903,7 +905,14 @@ const openAutomatedPostKeyGenModal = async function (newInstanceItem, appData, w
 		callbacks.uciSaveApplyRestart(instance_id);
 	});
 
-	L.ui.showModal(TXT.KEY.add_server_instance + ' (' + instance_id + ')', [
+	let displayName;
+	if (cnName) {
+		displayName = ': ' + cnName;
+	} else {
+		displayName = ' (' + instance_id + ')';
+	}
+
+	L.ui.showModal(TXT.KEY.add_server_instance + displayName, [
 		E('div', { 'class': 'cbi-map' }, [
 			E('div', { 'class': 'cbi-section' }, [
 				promptMessageNode,

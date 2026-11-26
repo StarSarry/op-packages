@@ -40,6 +40,9 @@ elif op == 'add':
 elif op == 'set':
     key, value = args[0].split('=', 1)
     state[key.split('.')[-1]] = value
+elif op == 'rename':
+    key, new = args[0].split('=', 1)
+    state[new] = state.pop(key.split('.')[-1])
 elif op == 'delete':
     state.pop(args[0].split('.')[-1], None)
 elif op != 'commit':
@@ -51,7 +54,8 @@ if op != 'get': p.write_text(json.dumps(state))
                         PKG_UPGRADE='1', PATH=str(binary) + os.pathsep + os.environ['PATH'])
         script = (ROOT / 'root/etc/uci-defaults/30_luci-theme-argon').read_text()
         self.script = self.root / 'initialize'
-        self.script.write_text(script.replace('/etc/', str(self.root / 'etc') + '/'))
+        self.script.write_text(script.replace('/etc/', str(self.root / 'etc') + '/')
+                               .replace('/usr/lib/lua/luci/i18n', str(self.root / 'i18n')))
 
     def initialize(self, state=None):
         if state is not None:
@@ -91,9 +95,27 @@ if op != 'get': p.write_text(json.dumps(state))
         original = dict(login_style='centered', primary='#abcdef', blur='0',
                         transparency='0', online_wallpaper='unsplash', use_api_key='fixture-key')
         state = self.initialize(original)
+        self.assertEqual(state['unsplash_api_key'], original.pop('use_api_key'))
+        self.assertNotIn('use_api_key', state)
         for key, value in original.items():
             self.assertEqual(state[key], value)
         self.assertEqual(self.initialize(), state)
+
+    def test_ambiguous_old_keys_are_preserved_offline_across_provider_changes(self):
+        for source in ('wallhaven_123', 'wallhaven', 'bing', 'none'):
+            with self.subTest(source=source):
+                state = self.initialize(dict(online_wallpaper=source, use_api_key='old-key'))
+                self.assertEqual(state['legacy_wallpaper_api_key'], 'old-key')
+                self.assertNotIn('use_api_key', state)
+                state['online_wallpaper'] = 'unsplash'
+                self.assertEqual(self.initialize(state), state)
+                self.assertNotIn('unsplash_api_key', state)
+                self.assertNotIn('wallhaven_api_key', state)
+        state = self.initialize(dict(online_wallpaper='unsplash_123', use_api_key='old-key',
+                                     unsplash_api_key='new-key', wallhaven_api_key='other-key'))
+        self.assertEqual(state['unsplash_api_key'], 'new-key')
+        self.assertEqual(state['wallhaven_api_key'], 'other-key')
+        self.assertEqual(state['legacy_wallpaper_api_key'], 'old-key')
 
     def test_old_bing_switch_migrates_without_overwriting_current_source(self):
         for old, source in [('0', 'none'), ('1', 'bing')]:
@@ -126,6 +148,40 @@ if op != 'get': p.write_text(json.dumps(state))
         marker.touch()
         subprocess.run(['sh', str(preinst)], env=dict(self.env, IPKG_INSTROOT=str(self.root)),
                        check=True, capture_output=True)
+        self.assertFalse((self.root / 'etc/argon-config-migration').exists())
+
+    def theme_preinst(self):
+        recipe = (ROOT / 'Makefile').read_text()
+        source = re.search(r'define Package/luci-theme-argon/preinst\n(.*?)\nendef', recipe, re.S).group(1)
+        script = self.root / 'theme-preinst'
+        script.write_text(source.replace('$$', '$'))
+        subprocess.run(['sh', str(script)], env=dict(self.env, IPKG_INSTROOT=str(self.root)),
+                       check=True, capture_output=True)
+
+    def test_bundled_translations_survive_an_older_theme_only_updater(self):
+        original = self.root / 'usr/lib/lua/luci/i18n/argon-config.zh-cn.lmo'
+        original.parent.mkdir(parents=True)
+        original.write_bytes(b'previous Chinese catalog')
+        self.theme_preinst()
+        # The previous package removes its formerly owned catalog on upgrade.
+        original.unlink()
+        self.initialize()
+        restored = self.root / 'i18n/argon-config.zh-cn.lmo'
+        self.assertEqual(restored.read_bytes(), b'previous Chinese catalog')
+        self.assertFalse((self.root / 'etc/argon-config-migration').exists())
+        self.initialize()
+        self.assertEqual(restored.read_bytes(), b'previous Chinese catalog')
+
+    def test_language_package_catalog_is_not_replaced_by_the_migration_backup(self):
+        original = self.root / 'usr/lib/lua/luci/i18n/argon-config.de.lmo'
+        original.parent.mkdir(parents=True)
+        original.write_bytes(b'old German catalog')
+        self.theme_preinst()
+        target = self.root / 'i18n/argon-config.de.lmo'
+        target.parent.mkdir()
+        target.write_bytes(b'new official language package')
+        self.initialize()
+        self.assertEqual(target.read_bytes(), b'new official language package')
         self.assertFalse((self.root / 'etc/argon-config-migration').exists())
 
 

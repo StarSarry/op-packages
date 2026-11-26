@@ -6,8 +6,11 @@ export type AppRoute =
   | 'iptv'
   | 'devices'
   | 'safeshield'
+  | 'netwatch'
+  | 'smarthome'
   | 'rules'
   | 'account'
+  | 'apps'
   | 'system'
   | 'settings';
 
@@ -70,6 +73,20 @@ export const ROUTES: readonly RouteDefinition[] = [
     description: 'DNS 보호 상태를 확인하고 차단 목록을 관리합니다.',
   },
   {
+    route: 'netwatch',
+    hash: '#netwatch',
+    label: 'Network Watch',
+    title: 'Network Watch',
+    description: '연결된 기기의 외부 통신 변화를 가볍게 관찰하고 주의 신호를 확인합니다.',
+  },
+  {
+    route: 'smarthome',
+    hash: '#smarthome',
+    label: '스마트홈',
+    title: '스마트홈',
+    description: 'Jarbis로 Wi-Fi 스마트 전구를 검색하고 제어합니다.',
+  },
+  {
     route: 'rules',
     hash: '#rules',
     label: '사용자 규칙',
@@ -82,6 +99,13 @@ export const ROUTES: readonly RouteDefinition[] = [
     label: 'SmartSafeHub 계정',
     title: 'SmartSafeHub 계정',
     description: '이 기기의 SmartSafeHub 계정 연결 상태와 구독 플랜을 확인합니다.',
+  },
+  {
+    route: 'apps',
+    hash: '#apps',
+    label: 'Apps',
+    title: 'SmartSafeHub Apps',
+    description: 'SmartSafeHub에서 검증한 앱과 확장 기능을 살펴봅니다.',
   },
   {
     route: 'system',
@@ -105,5 +129,5 @@ export const ROUTE_BY_NAME = Object.fromEntries(
 
 // Public demo exposes only these read-only, fixture-backed screens.
 export const DEMO_ROUTES: readonly AppRoute[] = [
-  'home', 'activity', 'network', 'wifi', 'devices', 'safeshield', 'rules', 'system',
+  'home', 'activity', 'network', 'wifi', 'devices', 'safeshield', 'netwatch', 'smarthome', 'rules', 'account', 'apps', 'system',
 ];

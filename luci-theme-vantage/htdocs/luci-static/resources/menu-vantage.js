@@ -10,8 +10,8 @@
  * Renders the icon rail + flyouts (bottom bar + sheet on phones), the
  * breadcrumb, level-3 page tabs, the Ctrl+K / "/" command palette, the host
  * chip, the theme switch and decorates LuCI's #indicators. Everything here is
- * built from ui.menu (ACL filtered server side) and rpc; the templates stay
- * data-free.
+ * built from ui.menu (ACL filtered server side) and rpc, but for what a page
+ * hands the palette (PALETTE_EVENT); the templates stay data-free.
  *
  * DOM rule: LuCI's E()/dom.append() assign a plain string argument to
  * innerHTML, so every piece of text (menu titles, breadcrumbs, palette
@@ -25,6 +25,118 @@ const callWirelessDevices = rpc.declare({ object: 'luci-rpc', method: 'getWirele
 
 const THEME_KEY = 'vantage.theme';
 const RAIL_KEY = 'vantage.rail';
+const LOGIN_KEY = 'vantage.login';      /* read by the login page's login.js */
+/* the dashboard's network path backdrop (luci-app-vantage view/vantage/overview.js),
+   picked here when the dashboard is installed; the dashboard listens for BACKDROP_EVENT */
+const BACKDROP_KEY = 'vantage.backdrop.v1';
+const BACKDROP_EVENT = 'vantage:backdrop';
+/* Low-power router (#101), with the dashboard: it asks for the slow parts
+   less often and nothing moves (no backdrop, no flow dots, none on the
+   login page either); the dashboard reads data-vt-power and listens for
+   POWER_EVENT */
+const POWER_EVENT = 'vantage:power';
+/* Motion when not in focus (#131): off, nothing moves while another
+   window has the focus (the refresh dot here, the dashboard's ring, flow
+   dots and backdrop, the login page's particles), as a moving part keeps
+   the browser drawing; on, they go on. The dashboard reads
+   data-vt-unfocused and listens for UNFOCUSED_EVENT */
+const UNFOCUSED_EVENT = 'vantage:unfocused';
+/* Speed units (the dashboard's traffic, the Appearance group the app reads
+   too): the dashboard reads data-vt-units and listens for UNITS_EVENT */
+const UNITS_EVENT = 'vantage:units';
+/* The refresh dot's pulse is a CSS animation; running on the compositor it
+   makes the browser draw a frame on every display refresh, sixty a second,
+   on every page that polls, for a pulse five seconds long. Paused through
+   the Web Animations API and stepped MOTION_MS apart instead, the page
+   draws 15 frames a second. The dashboard moves more (its ring, flow dots
+   and backdrop) on a clock of its own and sends each tick as MOTION_EVENT:
+   while those arrive the dot follows them, so the page still draws one set
+   of frames */
+const MOTION_MS = 66;
+const MOTION_EVENT = 'vantage:tick';
+/* Appearance for every browser: saved on the router, in
+   /etc/config/vantage_theme (section appearance), by whoever may (rpcd
+   group luci-theme-vantage); header.ut and sysauth.ut hand its values over
+   as data-vt-look-<name>, and data-vt-look-save says whether this login
+   may save: 'yes', 'relogin' (it would at a new login: one from before
+   the group existed) or 'no'. A pick made without that right stays in
+   this browser (the own key) and wins here, but not for a login that may
+   save (those keys are dropped then); this browser's last pick (the old
+   key, also what the dashboard reads under another theme) counts until
+   the router has one. */
+/* this package's version, as its Makefile has it (tests/version.test.js) */
+const VERSION = '1.2.1';
+/* Check for updates (Appearance): when asked, and never on its own unless
+   the daily check below is on, the browser reads the project's 24.10
+   package list on GitHub Pages (the same release as 25.12's), without
+   cookies or a referrer. Only a version number passes; the link is a
+   constant, to the latest release. */
+const UPDATE_INDEX = 'https://anothadev.github.io/luci-theme-vantage/24.10/Packages';
+/* the theme's entry in that list; up here, as jsmin reads a "/" right
+   after => as a division and drops the space inside it (every packaged
+   check before 1.0.18 failed that way) */
+const UPDATE_ENTRY = /^Package: luci-theme-vantage$/m;
+/* The daily check (#133), off unless picked under Appearance: this browser
+   then asks that list by itself, at most once in UPDATE_EVERY, from a page
+   of this theme that is open and in view. Asking shows the list's host
+   this computer's address, so the pick is this browser's alone: it is not
+   in LOOK, never goes to /etc/config/vantage_theme, and the login page
+   knows nothing of it. Kept with it: the last try and the version the
+   list had, { at, latest }. */
+const UPDATE_AUTO_KEY = 'vantage.update.auto';
+const UPDATE_LAST_KEY = 'vantage.update.last';
+const UPDATE_EVERY = 24 * 3600 * 1000;
+/* the list is a few kilobytes: one that says it is larger than this is
+   not read, and no more than this of one is looked at */
+const UPDATE_MAX = 262144;
+
+const LOOK = {
+	theme: { own: 'vantage.theme.own', before: THEME_KEY, ok: [ 'auto', 'light', 'dark' ] },
+	login: { own: 'vantage.login.own', before: LOGIN_KEY, ok: [ 'grid', 'stars', 'none' ] },
+	backdrop: { own: 'vantage.backdrop.own', before: BACKDROP_KEY, ok: [ 'grid', 'stars', 'none' ] },
+	power: { own: 'vantage.power.own', before: 'vantage.power', ok: [ 'normal', 'low' ] },
+	unfocused: { own: 'vantage.unfocused.own', before: 'vantage.unfocused', ok: [ 'still', 'moving' ] },
+	/* what shows next to the logo; the hostname and model come from system board */
+	brand: { own: 'vantage.brand.own', before: 'vantage.brand', ok: [ 'none', 'hostname', 'model' ] },
+	/* what the dashboard reads traffic in; the app's own (fmt.setSpeedUnits) */
+	units: { own: 'vantage.units.own', before: 'vantage.units', ok: [ 'bits', 'bytes' ] }
+};
+const LOOK_SYNC = 'vantage.look';         /* another tab saved one: { name, value } */
+const LOOK_SET_EVENT = 'vantage:backdrop-set';   /* the dashboard's own picker hands its pick over */
+/* The dashboard's Customize saves its chart style, network path form and
+   layouts with the Appearance, in one write when it is done: { values,
+   done(ok) }. The template reads them back with these same rules. */
+const VIEW_SAVE_EVENT = 'vantage:view-save';
+const VIEW_CHARTS = [ 'overlay', 'log', 'mirror', 'mirror-split', 'lanes' ];
+const VIEW_PATHS = [ 'full', 'compact' ];
+const VIEW_LAYOUT = /^(default|[a-z]{1,8}:[0-3]:[1-4](:h)?( [a-z]{1,8}:[0-3]:[1-4](:h)?){0,11})$/;
+/* The palette finds more than pages where someone answers PALETTE_EVENT:
+   the dashboard, while its page is open, with its clients, radios, Wi-Fi
+   networks and interfaces (luci-app-vantage view/vantage/overview.js,
+   searchEntries). The palette sends the event on window when it opens and
+   each time the query changes, detail { query, add }; a listener hands
+   add(), there and then, a list narrowed to the query, of at most
+   PROVIDED_MAX entries a kind:
+     kind    'client', 'radio', 'ssid' or 'interface': the header it goes under
+     title   its name, matched as a page's title is
+     detail  the row's second text (an address, a channel); optional
+     words   what else finds it and is never shown (a MAC); optional
+     run     a function: what Enter or a click does
+   With no one listening (any other page, no dashboard) it lists pages
+   only. What comes back is someone else's data: an entry not of this form
+   is dropped (providedEntries), its texts only ever become text nodes and
+   nothing of it goes into a URL. */
+const PALETTE_EVENT = 'vantage:palette';
+const PROVIDED_KINDS = [ 'client', 'radio', 'ssid', 'interface' ];
+const PROVIDED_MAX = 8;
+const PROVIDED_SCAN = 64;                 /* entries looked at, of however many came */
+const PROVIDED_TEXT = 128, PROVIDED_WORDS = 512;
+const callLookSet = rpc.declare({ object: 'uci', method: 'set', params: [ 'config', 'section', 'values' ], reject: true });
+const callLookCommit = rpc.declare({ object: 'uci', method: 'commit', params: [ 'config' ], reject: true });
+/* While an apply awaits its rollback, rpcd refuses commit and revert alike, but not set: a pick set
+   then could not be taken back, and would go out unseen with the next Save & Apply. So a save starts
+   with this revert, which has nothing to undo and is refused in just that case. */
+const callLookRevert = rpc.declare({ object: 'uci', method: 'revert', params: [ 'config' ], reject: true });
 
 /* 24px stroke icons, drawn for this theme: constant [tag, attributes] lists,
    built with createElementNS (no markup parsing, no user data) */
@@ -40,13 +152,12 @@ const ICONS = {
 	generic: [ [ 'circle', { cx: '12', cy: '12', r: '8' } ], [ 'circle', { cx: '12', cy: '12', r: '2.2' } ] ],
 	page: [ [ 'path', { d: 'M7 3.5h6.5l4.5 4.5v12.5H7z' } ], [ 'path', { d: 'M13.5 3.5V8H18' } ] ],
 	caret: [ [ 'path', { d: 'm9 6 6 6-6 6' } ] ],
-	enter: [ [ 'path', { d: 'M19 5v6a3 3 0 0 1-3 3H6M10 10l-4 4 4 4' } ] ],
+	down: [ [ 'path', { d: 'm6 9 6 6 6-6' } ] ],
 	search: [ [ 'circle', { cx: '11', cy: '11', r: '6.5' } ], [ 'path', { d: 'm16 16 4.5 4.5' } ] ],
 	sun: [ [ 'circle', { cx: '12', cy: '12', r: '4' } ], [ 'path', { d: 'M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4' } ] ],
 	moon: [ [ 'path', { d: 'M19.5 14.5A7.5 7.5 0 0 1 9.5 4.5a7.5 7.5 0 1 0 10 10z' } ] ],
 	auto: [ [ 'circle', { cx: '12', cy: '12', r: '8' } ], [ 'path', { d: 'M12 4a8 8 0 0 1 0 16z', 'class': 'vt-fill' } ] ],
 	logout: [ [ 'path', { d: 'M14 4h4.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H14' } ], [ 'path', { d: 'M10 8l-4 4 4 4M6 12h10' } ] ],
-	pin: [ [ 'path', { d: 'M4 5v14M9 12h11M15 7l5 5-5 5' } ] ],
 	info: [ [ 'circle', { cx: '12', cy: '12', r: '8.5' } ], [ 'path', { d: 'M12 11v5.5' } ], [ 'circle', { cx: '12', cy: '7.75', r: '.6' } ] ],
 	more: [ [ 'circle', { cx: '5.5', cy: '12', r: '.9' } ], [ 'circle', { cx: '12', cy: '12', r: '.9' } ], [ 'circle', { cx: '18.5', cy: '12', r: '.9' } ] ]
 };
@@ -120,6 +231,70 @@ function svg(name, size) {
 }
 
 function storageGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+
+/* '1.0.16' or '1.0.16-r1' -> [ 1, 0, 16 ]; null for anything else */
+function versionParts(v) {
+	const m = /^(\d{1,4}(?:\.\d{1,4}){1,3})(?:-r\d{1,4})?$/.exec(String(v == null ? '' : v));
+	return m ? m[1].split('.').map(Number) : null;
+}
+function newerVersion(a, b) {
+	for (let i = 0; i < Math.max(a.length, b.length); i++)
+		if ((a[i] || 0) !== (b[i] || 0)) return (a[i] || 0) > (b[i] || 0);
+	return false;
+}
+/* the theme's version in an opkg package list, without its release */
+function listedVersion(text) {
+	const block = String(text || '').split(/\n\s*\n/).find(b => UPDATE_ENTRY.test(b));
+	const m = block && /^Version: (\S+)$/m.exec(block);
+	return m && versionParts(m[1]) ? m[1].replace(/-r\d+$/, '') : null;
+}
+/* the daily check's last try as kept, { at, latest }: a time, and a
+   version or null (none read); null for anything else */
+function updateMemory(text) {
+	let m = null;
+	try { m = JSON.parse(text); } catch (e) {}
+	if (!m || typeof m.at !== 'number' || !isFinite(m.at)) return null;
+	return { at: m.at, latest: (typeof m.latest === 'string' && versionParts(m.latest)) ? m.latest : null };
+}
+/* a check is due unless one was tried in the UPDATE_EVERY before `now`
+   (a try dated ahead of the clock does not count) */
+function updateDue(mem, now) {
+	return !(mem && mem.at <= now && now - mem.at < UPDATE_EVERY);
+}
+/* the version to tell about: the one the list had, when newer than `running` */
+function newerKnown(mem, running) {
+	const a = mem && versionParts(mem.latest), b = versionParts(running);
+	return (a && b && newerVersion(a, b)) ? mem.latest : null;
+}
+
+/* the value in force, from [ pending, own, router, before ]: the first
+   the theme knows, else the first choice (the default); the templates'
+   inline scripts and login.js do the same without the pending one */
+function lookValue(ok, list) {
+	for (const v of list) if (ok.indexOf(v) >= 0) return v;
+	return ok[0];
+}
+function lookWrite(values) {
+	return callLookRevert('vantage_theme')
+		.then(() => callLookSet('vantage_theme', 'appearance', values))
+		.then(() => callLookCommit('vantage_theme').catch(e => callLookRevert('vantage_theme').then(() => { throw e; }, () => { throw e; })));
+}
+function viewValue(name, value) {
+	if (name === 'chart') return VIEW_CHARTS.indexOf(value) >= 0;
+	if (name === 'path') return VIEW_PATHS.indexOf(value) >= 0;
+	return /^layout_(wide|mid|narrow)(_wired)?$/.test(name) && typeof value === 'string' && VIEW_LAYOUT.test(value);
+}
+
+/* the router's value of one, as the templates set it (literal names) */
+function setLookAttr(root, name, value) {
+	if (name === 'theme') root.setAttribute('data-vt-look-theme', value);
+	else if (name === 'login') root.setAttribute('data-vt-look-login', value);
+	else if (name === 'backdrop') root.setAttribute('data-vt-look-backdrop', value);
+	else if (name === 'power') root.setAttribute('data-vt-look-power', value);
+	else if (name === 'unfocused') root.setAttribute('data-vt-look-unfocused', value);
+	else if (name === 'brand') root.setAttribute('data-vt-look-brand', value);
+	else if (name === 'units') root.setAttribute('data-vt-look-units', value);
+}
 function storageSet(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }
 
 function isTyping(el) {
@@ -173,6 +348,110 @@ function highlight(text, idx) {
 	return out;
 }
 
+/* A path ("Network › Firewall") matches only on what it says: the query
+   as a substring, or each of its words starting a word of the path. Not
+   as letters scattered across it ("wire" in "Network › Firewall").
+   null = no match. */
+function pathScore(query, path) {
+	const q = query.toLowerCase().trim().replace(/\s+/g, ' ');
+	const t = String(path || '').toLowerCase();
+	if (!q || !t) return null;
+	const at = t.indexOf(q);
+	if (at >= 0) return (at === 0 || /[\s\/›\-_(.]/.test(t[at - 1])) ? 10 : 6;
+	const words = t.split(/[\s\/›\-_(.]+/).filter(Boolean);
+	return q.split(' ').every(w => words.some(x => x.startsWith(w))) ? 4 : null;
+}
+
+/* Palette results for a query, best first: entries whose title matches,
+   or only when no title does, those whose path does (a provider's entry:
+   its second text and its words, `find`). Equal scores go to the
+   shallower entry (Network › Wireless before a Wireless tab). */
+function rankPalette(query, pool) {
+	const onTitle = [], onPath = [];
+	for (const e of pool) {
+		const t = fuzzy(query, e.title);
+		if (t) { onTitle.push({ e, score: t.score, idx: t.idx }); continue; }
+		const p = pathScore(query, e.find || e.path);
+		if (p != null) onPath.push({ e, score: p, idx: [] });
+	}
+	const depth = r => (r.e.segs || []).length;
+	return (onTitle.length ? onTitle : onPath).sort((a, b) => (b.score - a.score) || (depth(a) - depth(b)));
+}
+
+/* the header of a provider's kind (PROVIDED_KINDS); null for any other */
+function kindTitle(kind) {
+	switch (kind) {
+	case 'client': return _('Clients');
+	case 'radio': return _('Radios');
+	case 'ssid': return _('Wireless networks', 'vantage-theme');
+	case 'interface': return _('Interfaces');
+	}
+	return null;
+}
+
+/* What a provider handed over (see PALETTE_EVENT), as palette entries:
+   those of the form only, the first PROVIDED_MAX of a kind, of the first
+   PROVIDED_SCAN looked at. An entry's function is kept as it came and
+   called with nothing; what it throws stays with it. */
+function providedEntries(list) {
+	const out = [], n = new Map();
+	const within = (v, max) => typeof v === 'string' && v.length <= max;
+	for (const p of Array.isArray(list) ? list.slice(0, PROVIDED_SCAN) : []) {
+		if (!p || typeof p !== 'object') continue;
+		const kind = p.kind, title = p.title, run = p.run;
+		const detail = p.detail == null ? '' : p.detail, words = p.words == null ? '' : p.words;
+		const group = kindTitle(kind);
+		if (!group || typeof run !== 'function' || !within(title, PROVIDED_TEXT) || !title.trim() ||
+		    !within(detail, PROVIDED_TEXT) || !within(words, PROVIDED_WORDS)) continue;
+		n.set(kind, (n.get(kind) || 0) + 1);
+		if (n.get(kind) > PROVIDED_MAX) continue;
+		out.push({ kind, group, title, path: detail, find: detail + ' ' + words, run: () => {
+			try { run(); }
+			catch (e) { if (window.console) console.warn('vantage: palette entry', e); }
+		} });
+	}
+	return out;
+}
+
+/* The palette with a query: the pages as rankPalette left them and, where
+   a provider answered, its entries ranked the same way a kind at a time,
+   each kind under its header. The part that holds the best match comes
+   first, the pages on a tie; while they lead they go without a header,
+   as they do alone. pages: [ { e, score, idx } ]; provided:
+   providedEntries'; pagesHead: the pages' header -> [ { r, head, path } ] */
+function paletteSections(query, pages, provided, pagesHead) {
+	const parts = [ { rows: pages, head: pagesHead, pages: true } ];
+	for (const kind of PROVIDED_KINDS) {
+		const mine = provided.filter(e => e.kind === kind);
+		if (mine.length) parts.push({ rows: rankPalette(query, mine), head: mine[0].group });
+	}
+	/* sort() keeps the order of equals: the pages, then the kinds as listed */
+	const order = parts.filter(p => p.rows.length).sort((a, b) => b.rows[0].score - a.rows[0].score);
+	return order.flatMap((p, n) => p.rows.map((r, i) => ({ r, head: (i || (p.pages && !n)) ? null : p.head, path: r.e.path })));
+}
+
+/* The palette without a query: rows under their category's header, which
+   a category of one row goes without. Under a header a row's path leaves
+   the category out (a tab shows its page only); a row without one keeps
+   its whole path. A provider's entries (e.kind) always have their header,
+   as their second text is no path and says nothing of the kind.
+   results: [ { e } ] in index order -> [ { r, head, path } ] */
+function paletteLayout(results) {
+	const size = new Map();
+	for (const r of results) size.set(r.e.group, (size.get(r.e.group) || 0) + 1);
+	let prev = null;
+	return results.map(r => {
+		const g = r.e.group, headed = size.get(g) > 1 || !!r.e.kind;
+		const head = (headed && g !== prev) ? g : null;
+		prev = g;
+		let path = r.e.path || '';
+		if (r.e.kind) return { r, head, path };
+		if (headed && path === g) path = '';
+		else if (headed && path.startsWith(g + ' › ')) path = path.slice(g.length + 3);
+		return { r, head, path };
+	});
+}
+
 /* cells holding only addresses, counters, rates or durations get the mono stack */
 const UNITS = /(?<![A-Za-z])(?:[kKMGTP]?i?B(?:\/s)?|[kMG]?bit\/s|[kMG]?bps|dBm|dB|[kMG]?Hz|ms|us|MCS|NSS|EHT|HE|VHT|HT|pkts?|packets|bytes|min|d|h|m|s)(?![A-Za-z])/g;
 function technical(text) {
@@ -180,6 +459,37 @@ function technical(text) {
 	if (!t || t.length > 120 || !/\d/.test(t)) return false;
 	const rest = t.replace(UNITS, '');
 	return /\d/.test(rest) && /^[\s0-9a-fA-F.:,\/%()+\-x[\]~=]*$/.test(rest);
+}
+
+/* Columns of numbers and addresses: LuCI's titles for the columns that
+   vantage.css keeps on one line by English words in a cell's data-title
+   ("cells: numbers and addresses never break"), in LuCI 25.12 and 24.10.
+   A cell's data-title is its column's title as shown, so in another
+   language those rules miss it and "11h 50m 29s" wraps (#111); a cell
+   whose title is LuCI's translation of one of these takes .vt-nowrap. */
+const NOWRAP_TITLES = [ 'CPU usage (%)', 'DUID', 'Gateway', 'IP address', 'IPv4 address', 'IPv6 address', 'IPv6 addresses',
+	'Lease time remaining', 'MAC address', 'Memory usage (%)', 'Metric', 'PID', 'Priority', 'Remaining time', 'Source',
+	'Start priority', 'Target' ];
+
+/* a column title as compared: uppercase, as the theme shows it (LuCI takes
+   a cell's data-title from its heading's innerText), spaces collapsed. The
+   browser uppercases by the page's language (lang: Turkish i becomes İ,
+   Greek loses its accents), so this does too */
+function titleKey(text, lang) {
+	const s = String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
+	try { return s.toLocaleUpperCase(lang || undefined); }
+	catch (e) { return s.toUpperCase(); }
+}
+
+/* the titleKey()s of NOWRAP_TITLES as tr (LuCI's _) translates them, those
+   that differ from the English the CSS matches: none in English */
+function nowrapTitles(tr, lang) {
+	const out = new Set();
+	NOWRAP_TITLES.forEach(t => {
+		const s = tr(t);
+		if (typeof s === 'string' && s !== t && s.trim()) out.add(titleKey(s, lang));
+	});
+	return out;
 }
 
 /* heading text as compared for repeats: case, spacing and a trailing colon don't count */
@@ -193,6 +503,99 @@ function headingKey(text) {
 function repeatsTrail(key, tag, trail) {
 	if (!key) return false;
 	return (tag === 'H2' ? trail.all : trail.page).has(key);
+}
+
+/* The crumbs as shown: one that only repeats the crumb before it
+   ("System › System", a page and its tab of the same name) takes that
+   crumb's place, with its own (deeper) link and level. */
+function mergeCrumbs(parts) {
+	const out = [];
+	for (const p of parts) {
+		if (out.length && headingKey(out[out.length - 1].title) === headingKey(p.title)) out[out.length - 1] = p;
+		else out.push(p);
+	}
+	return out;
+}
+
+/* LuCI renders its 404 with the deepest node it resolved (L.env.nodespec):
+   a category (firstchild) or a node without an action */
+function notFound(spec) {
+	if (!spec || typeof spec !== 'object') return false;
+	const type = spec.action && typeof spec.action === 'object' ? spec.action.type : null;
+	return !type || type === 'firstchild';
+}
+
+/* What the tab's title starts with while the dashboard says something
+   needs attention: luci-app-vantage sets data-vt-alert on <html> ('warn'
+   or 'err', as the refresh dot reads it in vantage.css) and, since 1.1,
+   data-vt-alert-count, how many checks say so. "(2) " then, the form a
+   mail tab has made familiar, and in front, as a narrow tab cuts the
+   title's end; "(!) " where no count comes with the level (an older
+   dashboard), or what comes is not a number from 1 to 999. Signs and
+   digits only: nothing in it to translate. */
+function alertMark(level, count) {
+	if (level !== 'warn' && level !== 'err') return '';
+	const n = String(count == null ? '' : count), counted = /^[1-9]\d{0,2}$/.test(n);
+	return counted ? '(' + n + ') ' : '(!) ';
+}
+
+/* Does help text carry a warning? LuCI writes them as a paragraph that
+   opens with a short label and a colon ("Note:", "Warning:", "注意：",
+   "Uwaga:"), whatever the language, and sometimes in bold. Line breaks
+   end a paragraph. */
+function helpWarns(desc) {
+	if (desc.querySelector('strong, b, .warning, .alert-message')) return true;
+	let text = '';
+	(function walk(node) {
+		node.childNodes.forEach(n => {
+			if (n.nodeType === 3) text += n.data;
+			else if (n.nodeName === 'BR') text += '\n';
+			else if (n.nodeType === 1 && !n.classList.contains('vt-help')) walk(n);
+		});
+	})(desc);
+	return text.split('\n').some(p => /^\s*[^\s\d:：]{1,16}(?:\s[^\s\d:：]{1,16})?\s*[:：]/u.test(p));
+}
+
+/* Where a folded help line ends cleanly: after its first sentence, or at
+   LuCI's first line break, when that falls on the first line. Returns the
+   offset in px from the text's left edge, or null when the line has to
+   fade out instead. A full stop ends a sentence only after two characters
+   that are not dots, so "e.g." does not; the stop is the match's last
+   character (no lookbehind: Safari before 16.4 rejects the whole file). */
+const SENTENCE_END = /[。！？]|[^\s.]{2}[.!?](?=\s|$)/u;
+
+function helpCut(desc, cs, line) {
+	const walker = document.createTreeWalker(desc, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+		acceptNode: n => n.nodeType === 1 && n.classList.contains('vt-help') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
+	});
+	let end = null, last = null;
+	for (let n = walker.nextNode(); n && !end; n = walker.nextNode()) {
+		if (n.nodeName === 'BR') { end = last; break; }
+		if (n.nodeType !== 3) continue;
+		const m = SENTENCE_END.exec(n.data);
+		if (m) end = [ n, m.index + m[0].length - 1 ];
+		else if (/\S/.test(n.data)) last = [ n, n.data.search(/\s*$/) - 1 ];
+	}
+	if (!end) return null;
+	const range = document.createRange();
+	range.setStart(end[0], end[1]);
+	range.setEnd(end[0], end[1] + 1);
+	const rects = range.getClientRects(), r = rects[rects.length - 1];
+	const box = desc.getBoundingClientRect();
+	if (!r || r.bottom > box.top + (parseFloat(cs.paddingTop) || 0) + line + 1) return null;
+	return Math.ceil(r.right - box.left) + 1;
+}
+
+/* Where the text of a folded help line ends: a line that wraps early (a
+   long word next, a narrow phone) ends well short of the box, so the fade
+   is placed there. Offset in px from the text's left edge, or null. */
+function helpLineEnd(desc, cs, line) {
+	const range = document.createRange();
+	range.selectNodeContents(desc);
+	const box = desc.getBoundingClientRect(), limit = box.top + (parseFloat(cs.paddingTop) || 0) + line + 1;
+	let right = 0;
+	for (const r of range.getClientRects()) if (r.width && r.bottom <= limit) right = Math.max(right, r.right);
+	return right ? Math.ceil(right - box.left) : null;
 }
 
 /* ---------------------------------------------------------------------------
@@ -268,51 +671,66 @@ function replaceTable(table, block) {
 }
 
 /* Memory: one bar. in use = total - available; cache (reclaimable) =
-   available - free; free = total - LuCI's "Used" (which is total - free). */
+   available - free; free = total - LuCI's "Used" (which is total - free).
+   A table without "Total Available" (Kwrt's luci-mod-status, #103) is read
+   its own way, below. */
 function enhanceMemory() {
 	statusSections(_('Memory')).forEach(section => {
 		const table = pendingTable(section);
 		if (!table) return;
 		const rows = barRows(table), get = l => (rows.find(r => r.label === l) || {}).pair;
 		const avail = get(_('Total Available')), used = get(_('Used')),
-		      buffered = get(_('Buffered')), cached = get(_('Cached')), swap = get(_('Swap free'));
+		      buffered = get(_('Buffered')), cached = get(_('Cached')),
+		      swapFree = get(_('Swap free')), swapUsed = get(_('Swap used'));
 		const total = (used || avail || {}).total;
 		if (!total || !used) return;
 
-		const free = Math.max(0, total - used.value);
-		let available = avail ? avail.value : free + (buffered ? buffered.value : 0) + (cached ? cached.value : 0);
-		available = Math.min(total, Math.max(available, free));
+		let free, available;
+		/* the row decides, not its value: LuCI shows "?" when it has none */
+		if (rows.some(r => r.label === _('Total Available'))) {
+			free = Math.max(0, total - used.value);
+			available = avail ? avail.value : free + (buffered ? buffered.value : 0) + (cached ? cached.value : 0);
+			available = Math.min(total, Math.max(available, free));
+		}
+		else {
+			/* Kwrt: "Used" is total - MemAvailable. MemFree isn't shown, so the
+			   cache stands for what is reclaimable and Free is an estimate. */
+			available = Math.min(total, Math.max(0, total - used.value));
+			free = Math.max(0, available - (cached ? cached.value : 0));
+		}
 		const inuse = total - available, reclaim = available - free;
 		const usedPct = pctOf(inuse, total);
 
 		const summary = '%s: %s %s, %s %s (%s), %s %s, %s %s'.format(_('Memory'),
-			_('In use'), fmtBytes(inuse), _('Cache'), fmtBytes(reclaim), _('reclaimable'),
-			_('Free'), fmtBytes(free), _('Total'), fmtBytes(total));
+			_('In use', 'vantage-theme'), fmtBytes(inuse), _('Cache'), fmtBytes(reclaim), _('reclaimable'),
+			_('Free', 'vantage-theme'), fmtBytes(free), _('Total', 'vantage-theme'), fmtBytes(total));
 
 		const children = [
 			E('div', { 'class': 'v-meter-head' }, [
-				E('span', { 'class': 'v-meter-big' }, [ pctOf(available, total) + '%', E('small', {}, [ _('available') ]) ]),
+				E('span', { 'class': 'v-meter-big' }, [ pctOf(available, total) + '%', E('small', {}, [ _('available', 'vantage-theme') ]) ]),
 				E('span', { 'class': 'v-meter-sub' }, [ '%s / %s'.format(fmtBytes(available), fmtBytes(total)) ])
 			]),
 			E('div', { 'class': 'v-meter-bar', 'role': 'img', 'aria-label': summary }, [
-				segment('v-seg-used' + (usedPct >= 90 ? ' is-crit' : usedPct >= 75 ? ' is-warn' : ''), inuse, total, _('In use')),
+				segment('v-seg-used' + (usedPct >= 90 ? ' is-crit' : usedPct >= 75 ? ' is-warn' : ''), inuse, total, _('In use', 'vantage-theme')),
 				segment('v-seg-cache', reclaim, total, _('Cache') + ' (' + _('reclaimable') + ')')
 			]),
 			E('ul', { 'class': 'v-meter-legend', 'aria-hidden': 'true' }, [
-				legendKey('v-seg-used', _('In use'), inuse),
+				legendKey('v-seg-used', _('In use', 'vantage-theme'), inuse),
 				legendKey('v-seg-cache', _('Cache'), reclaim, _('reclaimable')),
-				legendKey('v-seg-free', _('Free'), free)
+				legendKey('v-seg-free', _('Free', 'vantage-theme'), free)
 			])
 		];
 
+		/* "Swap free" in LuCI's table, "Swap used" in Kwrt's */
+		const swap = swapFree ? { used: Math.max(0, swapFree.total - swapFree.value), total: swapFree.total }
+			: swapUsed ? { used: swapUsed.value, total: swapUsed.total } : null;
 		if (swap) {
-			const swapUsed = swap.total - swap.value;
 			children.push(E('div', { 'class': 'v-meter-rows v-meter-swap' }, E('div', { 'class': 'v-meter-row' }, [
-				E('span', { 'class': 'v-meter-label' }, [ _('Swap') ]),
+				E('span', { 'class': 'v-meter-label' }, [ _('Swap', 'vantage-theme') ]),
 				E('div', { 'class': 'v-meter-bar is-thin', 'role': 'img',
-				           'aria-label': '%s: %s / %s'.format(_('Swap'), fmtBytes(swapUsed), fmtBytes(swap.total)) },
-					segment('v-seg-used', swapUsed, swap.total)),
-				E('span', { 'class': 'v-meter-val' }, [ E('b', {}, [ fmtBytes(swapUsed) ]), ' / ' + fmtBytes(swap.total) ])
+				           'aria-label': '%s: %s / %s'.format(_('Swap', 'vantage-theme'), fmtBytes(swap.used), fmtBytes(swap.total)) },
+					segment('v-seg-used', swap.used, swap.total)),
+				E('span', { 'class': 'v-meter-val' }, [ E('b', {}, [ fmtBytes(swap.used) ]), ' / ' + fmtBytes(swap.total) ])
 			])));
 		}
 
@@ -320,7 +738,7 @@ function enhanceMemory() {
 	});
 }
 
-/* Storage: one thin bar per mount, "used · free of total" beside it */
+/* Storage: one thin bar per mount, "used · free · total" beside it */
 function enhanceStorage() {
 	statusSections(_('Storage')).forEach(section => {
 		const table = pendingTable(section);
@@ -337,10 +755,11 @@ function enhanceStorage() {
 			return E('div', { 'class': 'v-meter-row' }, [
 				label,
 				E('div', { 'class': 'v-meter-bar is-thin', 'role': 'img',
-				           'aria-label': '%s: %s %s, %s %s'.format(r.label, fmtBytes(used), _('used'), fmtBytes(size - used), _('free')) },
+				           'aria-label': '%s: %s %s, %s %s, %s %s'.format(r.label, fmtBytes(used), _('used'), fmtBytes(size - used), _('free'), fmtBytes(size), _('total')) },
 					segment('v-seg-used' + (p >= 95 ? ' is-crit' : p >= 80 ? ' is-warn' : ''), used, size)),
 				E('span', { 'class': 'v-meter-val' }, [
-					E('b', {}, [ fmtBytes(used) ]), ' ' + _('used') + ' · ' + fmtBytes(size - used) + ' ' + _('free') + ' · ' + fmtBytes(size)
+					/* a figure and its word stay on one line */
+					E('b', {}, [ fmtBytes(used) ]), '\u00a0' + _('used') + ' · ' + fmtBytes(size - used) + '\u00a0' + _('free') + ' · ' + fmtBytes(size) + '\u00a0' + _('total')
 				])
 			]);
 		})));
@@ -367,6 +786,19 @@ function decorateRadios() {
 	});
 }
 
+/* Port status: the ▲ / ▼ before each counter in a span of its own, for the
+   dashboard's upload and download colours */
+function decoratePorts() {
+	document.querySelectorAll('#view .ifacebox > .ifacebox-head.cbi-tooltip-container + .ifacebox-body > .cbi-tooltip-container').forEach(stats => {
+		Array.prototype.slice.call(stats.childNodes).forEach(n => {
+			const dir = n.nodeType === 3 && { '▲': 'tx', '▼': 'rx' }[n.data.charAt(0)];
+			if (!dir) return;
+			stats.insertBefore(E('span', { 'class': 'vt-port-dir', 'data-dir': dir }, [ n.data.charAt(0) ]), n);
+			n.data = n.data.slice(1);
+		});
+	});
+}
+
 function setupStockEnhancers() {
 	const view = document.getElementById('view');
 	if (!view || !window.MutationObserver) return;
@@ -375,7 +807,7 @@ function setupStockEnhancers() {
 	const run = () => {
 		if (busy) return;
 		busy = true;
-		try { enhanceMemory(); enhanceStorage(); decorateRadios(); }
+		try { enhanceMemory(); enhanceStorage(); decorateRadios(); decoratePorts(); }
 		catch (e) { if (window.console) console.warn('vantage: status enhancer', e); }
 		busy = false;
 	};
@@ -615,7 +1047,9 @@ return baseclass.extend({
 		setupCharts();
 		setupNftFlow();
 		this.setupKeys();
+		this.watchAlert();
 		this.loadHost();
+		this.setupUpdate();
 
 		ui.menu.load().then(L.bind(this.render, this));
 	},
@@ -627,7 +1061,14 @@ return baseclass.extend({
 		if (!admin) return;
 
 		this.admin = admin;
+		/* Appearance opened before the menu came in lacks the network
+		   path's group (hasDashboard): add it now */
+		if (this.appear && this.hasDashboard() && !this.appear.querySelector('input[name="vt-backdrop"]')) {
+			this.dashboardGroups().forEach(g => this.appear.insertBefore(g, this.appearUnfocused));
+			this.syncAppearance();
+		}
 		this.dp = (L.env.dispatchpath || []).slice();
+		this.missing = notFound(L.env.nodespec);
 
 		this.cats = ui.menu.getChildren(admin)
 			.filter(c => c.name !== 'logout')
@@ -756,6 +1197,24 @@ return baseclass.extend({
 			});
 			sync();
 		}
+
+		/* phones: the bar scrolls sideways, and each page load (or switch to
+		   the bottom bar) starts it at its first entry */
+		this.fitRailActive();
+		if (this.mqMobile.addEventListener) this.mqMobile.addEventListener('change', () => this.fitRailActive());
+	},
+
+	/* a clipped active entry is brought to the middle of the bar, at once,
+	   and only the bar moves: scrollIntoView() would scroll the page too */
+	fitRailActive() {
+		const list = document.getElementById('vt-rail-list');
+		const li = list && list.querySelector('.vt-rail-item.is-active');
+		if (!li || !this.mqMobile.matches || list.scrollWidth <= list.clientWidth) return;
+
+		const l = list.getBoundingClientRect(), r = li.getBoundingClientRect();
+		if (r.left >= l.left - 1 && r.right <= l.right + 1) return;
+
+		list.scrollLeft += (r.left + r.right - l.left - l.right) / 2;
 	},
 
 	handleRailClick(ev, cat, li, link) {
@@ -867,18 +1326,14 @@ return baseclass.extend({
 		this.endSwitch();
 		if (fly.getAttribute('data-cat') !== cat.name || fly.hidden) {
 			fly.textContent = '';
-			const total = cat.pages.length;
 			fly.appendChild(E('div', { 'class': 'vt-fly-head' }, [
-				svg(cat.icon, 18),
-				E('span', { 'class': 'vt-fly-title', 'id': 'vt-fly-title' }, [ cat.title ]),
-				E('span', { 'class': 'vt-fly-count' }, [ '%d %s'.format(total, total === 1 ? _('page') : _('pages')) ])
+				E('span', { 'class': 'vt-fly-title', 'id': 'vt-fly-title' }, [ cat.title ])
 			]));
 			const ul = E('ul', { 'class': 'vt-fly-list', 'role': 'list' });
 			for (const p of cat.pages) {
 				const cur = this.dp[1] === cat.name && this.dp[2] === p.name;
 				const item = E('li', {}, E('a', { 'class': 'vt-fly-link', 'href': L.url('admin', cat.name, p.name), 'aria-current': cur ? 'page' : null }, [
-					E('span', {}, [ p.title ]),
-					p.subs.length ? E('span', { 'class': 'vt-fly-meta' }, [ String(p.subs.length) ]) : ''
+					E('span', {}, [ p.title ])
 				]));
 				if (p.subs.length > 1) {
 					const sub = E('ul', { 'class': 'vt-fly-sub' });
@@ -891,7 +1346,6 @@ return baseclass.extend({
 				ul.appendChild(item);
 			}
 			fly.appendChild(ul);
-			fly.appendChild(E('div', { 'class': 'vt-fly-foot' }, [ _('Press'), ' ', E('kbd', {}, [ 'Ctrl K' ]), ' ', _('to search all pages') ]));
 			fly.setAttribute('data-cat', cat.name);
 			fly.setAttribute('role', 'region');
 			fly.setAttribute('aria-labelledby', 'vt-fly-title');
@@ -941,11 +1395,8 @@ return baseclass.extend({
 		this.openTimer = null;
 		this.closeFlyout(false);
 		fly.textContent = '';
-		const total = page.subs.length;
 		fly.appendChild(E('div', { 'class': 'vt-fly-head' }, [
-			svg(cat.icon, 18),
-			E('span', { 'class': 'vt-fly-title', 'id': 'vt-fly-title' }, [ page.title ]),
-			E('span', { 'class': 'vt-fly-count' }, [ '%d %s'.format(total, total === 1 ? _('page') : _('pages')) ])
+			E('span', { 'class': 'vt-fly-title', 'id': 'vt-fly-title' }, [ page.title ])
 		]));
 		const ul = E('ul', { 'class': 'vt-fly-list', 'role': 'list' });
 		for (const s of page.subs)
@@ -997,28 +1448,31 @@ return baseclass.extend({
 		for (let i = 1; i < this.dp.length && i <= 3; i++) {
 			node = node && node.children ? node.children[this.dp[i]] : null;
 			if (!node || !node.title) break;
-			parts.push({ title: _(node.title), segs: [ 'admin' ].concat(this.dp.slice(1, i + 1)) });
+			parts.push({ title: _(node.title), segs: [ 'admin' ].concat(this.dp.slice(1, i + 1)), level: i });
 		}
+		/* a 404: the crumbs lead to the category LuCI resolved, then say so */
+		if (this.missing) parts.push({ title: _('Not found'), segs: null, level: 0 });
 		if (!parts.length) return;
 
 		/* a page with page tabs: its current crumb switches between them,
 		   from the top bar, which stays in view while the tabs scroll away */
 		const cat = this.cats.find(c => c.name === this.dp[1]);
-		const page = cat && this.dp.length > 3 ? cat.pages.find(p => p.name === this.dp[2]) : null;
+		const page = cat && !this.missing && this.dp.length > 3 ? cat.pages.find(p => p.name === this.dp[2]) : null;
 		const siblings = page && page.subs.length > 1 ? page : null;
 
+		const crumbs = mergeCrumbs(parts);
 		nav.textContent = '';
-		parts.forEach((p, i) => {
-			const last = i === parts.length - 1;
+		crumbs.forEach((p, i) => {
+			const last = i === crumbs.length - 1;
 			if (i) nav.appendChild(E('span', { 'class': 'vt-crumb-sep', 'aria-hidden': 'true' }, [ '›' ]));
-			if (last && siblings && parts.length === 3) {
+			if (last && siblings && p.level === 3) {
 				/* a disclosure (aria-expanded + aria-controls): the panel is a
 				   region of links, not a menu, so no aria-haspopup */
 				const btn = E('button', {
 					'type': 'button', 'class': 'vt-crumb vt-crumb-current vt-crumb-switch', 'aria-current': 'page',
 					'aria-expanded': 'false', 'aria-controls': 'vt-flyout',
 					'title': _('Other pages in %s').format(siblings.title)
-				}, [ E('span', {}, [ p.title ]), svg('caret', 14) ]);
+				}, [ E('span', {}, [ p.title ]), svg('down', 14) ]);
 				btn.addEventListener('click', ev => {
 					if (this.switchOpen()) this.closeFlyout(true);
 					else this.openSwitch(cat, siblings, btn, ev.detail === 0);
@@ -1043,7 +1497,7 @@ return baseclass.extend({
 
 	renderTabs() {
 		const bar = document.getElementById('vt-tabs');
-		if (!bar || this.dp.length < 3) return;
+		if (!bar || this.missing || this.dp.length < 3) return;
 		const cat = this.admin.children[this.dp[1]];
 		const page = cat && cat.children ? cat.children[this.dp[2]] : null;
 		if (!page) return;
@@ -1070,16 +1524,19 @@ return baseclass.extend({
 			const key = e.segs.join('/') + '|' + e.title;
 			if (seen.has(key)) return;
 			seen.add(key);
-			e.hay = (e.path ? e.path + ' › ' : '') + e.title;
 			this.entries.push(e);
 		};
+		/* pages carry no icon: their category heads them, and only actions
+		   have one. A tab named like its page (System Log's "System Log")
+		   is that page's entry already. */
 		for (const c of this.cats) {
-			if (c.leaf) add({ title: c.title, path: '', group: c.title, segs: [ 'admin', c.name ], icon: c.icon });
+			if (c.leaf) add({ title: c.title, path: '', group: c.title, segs: [ 'admin', c.name ] });
 			for (const p of c.pages) {
-				add({ title: p.title, path: c.title, group: c.title, segs: [ 'admin', c.name, p.name ], icon: c.icon });
+				add({ title: p.title, path: c.title, group: c.title, segs: [ 'admin', c.name, p.name ] });
 				if (p.subs.length > 1)
 					for (const s of p.subs)
-						add({ title: s.title, path: c.title + ' › ' + p.title, group: c.title, segs: [ 'admin', c.name, p.name, s.name ], icon: 'page' });
+						if (headingKey(s.title) !== headingKey(p.title))
+							add({ title: s.title, path: c.title + ' › ' + p.title, group: c.title, segs: [ 'admin', c.name, p.name, s.name ] });
 			}
 		}
 	},
@@ -1087,18 +1544,29 @@ return baseclass.extend({
 	actions() {
 		const pref = this.themePref();
 		const list = [];
-		if (pref !== 'dark') list.push({ title: _('Use dark theme'), path: _('Appearance'), icon: 'moon', run: () => this.setTheme('dark') });
-		if (pref !== 'light') list.push({ title: _('Use light theme'), path: _('Appearance'), icon: 'sun', run: () => this.setTheme('light') });
-		if (pref !== 'auto') list.push({ title: _('Follow system theme'), path: _('Appearance'), icon: 'auto', run: () => this.setTheme('auto') });
+		if (pref !== 'dark') list.push({ title: _('Use dark theme'), path: _('Appearance', 'vantage-theme'), icon: 'moon', run: () => this.setTheme('dark') });
+		if (pref !== 'light') list.push({ title: _('Use light theme'), path: _('Appearance', 'vantage-theme'), icon: 'sun', run: () => this.setTheme('light') });
+		if (pref !== 'auto') list.push({ title: _('Follow system theme'), path: _('Appearance', 'vantage-theme'), icon: 'auto', run: () => this.setTheme('auto') });
+		const login = this.loginPref(), names = this.loginNames();
+		for (const k of [ 'grid', 'stars', 'none' ])
+			if (k !== login) list.push({ title: '%s: %s'.format(_('Login background'), names[k]), path: _('Appearance', 'vantage-theme'), icon: 'page', run: () => this.setLoginPref(k) });
+		if (this.hasDashboard()) {
+			const bd = this.backdropPref();
+			for (const k of [ 'grid', 'stars', 'none' ])
+				if (k !== bd) list.push({ title: '%s: %s'.format(_('Network path background'), names[k]), path: _('Appearance', 'vantage-theme'), icon: 'page', run: () => this.setBackdropPref(k) });
+		}
 		list.push({ title: _('Log out'), path: _('Session'), icon: 'logout', segs: [ 'admin', 'logout' ] });
-		list.forEach(a => { a.hay = a.path + ' › ' + a.title; a.group = _('Actions'); });
+		list.forEach(a => { a.group = _('Actions'); });
 		return list;
 	},
 
 	openPalette() {
 		if (this.pal) return;
-		/* a row menu left open would take the palette's Escape */
+		/* a row menu, Appearance or a pinned help box left open would take
+		   the palette's Escape */
 		this.closeActMenu(false);
+		this.closeAppearance(false);
+		this.closeHelp(false);
 		/* focus inside the flyout goes back to what opened the flyout, since
 		   closing it hides the element that had focus */
 		const from = document.activeElement;
@@ -1110,14 +1578,14 @@ return baseclass.extend({
 			'aria-controls': 'vt-pal-list', 'aria-autocomplete': 'list', 'autocomplete': 'off', 'spellcheck': 'false',
 			'placeholder': _('Jump to a page or action…'), 'aria-label': _('Search pages')
 		});
-		const list = E('ul', { 'class': 'vt-pal-list', 'id': 'vt-pal-list', 'role': 'listbox', 'aria-label': _('Results') });
+		const list = E('ul', { 'class': 'vt-pal-list', 'id': 'vt-pal-list', 'role': 'listbox', 'aria-label': _('Results', 'vantage-theme') });
 		const count = E('span', { 'class': 'vt-pal-count' });
 		const box = E('div', { 'class': 'vt-pal', 'role': 'dialog', 'aria-modal': 'true', 'aria-label': _('Command palette') }, [
-			E('div', { 'class': 'vt-pal-field' }, [ svg('search', 18), input, E('kbd', {}, [ 'Esc' ]) ]),
+			E('div', { 'class': 'vt-pal-field' }, [ svg('search', 18), input ]),
 			list,
 			E('div', { 'class': 'vt-pal-foot' }, [
 				E('span', {}, [ E('kbd', {}, [ '↑' ]), E('kbd', {}, [ '↓' ]), _('navigate') ]),
-				E('span', {}, [ E('kbd', {}, [ '↵' ]), _('open') ]),
+				E('span', {}, [ E('kbd', {}, [ '↵' ]), _('open', 'vantage-theme') ]),
 				E('span', {}, [ E('kbd', {}, [ 'Esc' ]), _('close') ]),
 				count
 			])
@@ -1141,39 +1609,46 @@ return baseclass.extend({
 		if (this.palReturn && this.palReturn.focus) this.palReturn.focus();
 	},
 
+	/* what whoever answers PALETTE_EVENT has for the query: its entries as
+	   providedEntries leaves them, and whether anyone answered at all. Only
+	   what is handed over while the event is out counts. */
+	provided(query) {
+		const raw = [];
+		let asking = true, answered = false;
+		window.dispatchEvent(new CustomEvent(PALETTE_EVENT, { detail: { query, add: list => {
+			if (!asking || !Array.isArray(list)) return;
+			answered = true;
+			for (const p of list.slice(0, PROVIDED_SCAN - raw.length)) raw.push(p);
+		} } }));
+		asking = false;
+		let entries = [];
+		try { entries = providedEntries(raw); }
+		catch (e) { if (window.console) console.warn('vantage: palette entries', e); }
+		return { entries, answered };
+	},
+
 	filterPalette() {
 		const pal = this.pal;
 		const q = pal.input.value.trim();
 		const pool = this.entries.concat(this.actions());
-		let results;
-
-		if (!q) {
-			results = pool.map(e => ({ e, idx: [] }));
-		}
-		else {
-			results = [];
-			for (const e of pool) {
-				const onTitle = fuzzy(q, e.title);
-				const onPath = onTitle ? null : fuzzy(q, e.hay);
-				if (onTitle) results.push({ e, score: onTitle.score + 6, idx: onTitle.idx });
-				else if (onPath) results.push({ e, score: onPath.score * .6, idx: [] });
-			}
-			results.sort((a, b) => b.score - a.score);
-			results = results.slice(0, 40);
-		}
+		const got = this.provided(q);
+		const found = q ? rankPalette(q, pool) : null;
+		const results = q ? found.slice(0, 40) : pool.map(e => ({ e, idx: [] }));
+		/* without a query a provider's entries come after the pages and
+		   actions, which stay where they are on every page */
+		const rows = q ? paletteSections(q, results, got.entries, _('Pages and actions'))
+			: paletteLayout(results.concat(got.entries.map(e => ({ e, idx: [] }))));
 
 		pal.list.textContent = '';
 		pal.items = [];
-		let group = null;
-		results.forEach((r, n) => {
-			if (!q && r.e.group !== group) {
-				group = r.e.group;
-				pal.list.appendChild(E('li', { 'class': 'vt-pal-group', 'role': 'presentation' }, [ group ]));
-			}
-			const li = E('li', { 'class': 'vt-pal-item', 'role': 'option', 'id': 'vt-pal-opt-' + n, 'aria-selected': 'false' }, [
-				svg(r.e.icon, 18),
+		rows.forEach(({ r, head, path }, n) => {
+			if (head) pal.list.appendChild(E('li', { 'class': 'vt-pal-group', 'role': 'presentation' }, [ head ]));
+			/* a provider's row has more to say beside its name than a page's:
+			   on a phone it goes under the name (vantage.css) */
+			const li = E('li', { 'class': r.e.kind ? 'vt-pal-item vt-pal-two' : 'vt-pal-item', 'role': 'option', 'id': 'vt-pal-opt-' + n, 'aria-selected': 'false' }, [
+				r.e.icon ? svg(r.e.icon, 18) : '',
 				highlight(r.e.title, r.idx),
-				r.e.path ? E('span', { 'class': 'vt-pal-path' }, [ r.e.path ]) : '',
+				path ? E('span', { 'class': 'vt-pal-path' }, [ path ]) : '',
 				E('kbd', { 'class': 'vt-pal-enter' }, [ '↵' ])
 			]);
 			li.addEventListener('mousemove', () => this.setPaletteActive(n, false));
@@ -1182,10 +1657,12 @@ return baseclass.extend({
 			pal.items.push({ li, e: r.e });
 		});
 
-		if (!results.length)
-			pal.list.appendChild(E('li', { 'class': 'vt-pal-empty', 'role': 'presentation' }, [ _('No matching pages') ]));
+		if (!rows.length)
+			pal.list.appendChild(E('li', { 'class': 'vt-pal-empty', 'role': 'presentation' }, [ got.answered ? _('Nothing found') : _('No matching pages') ]));
 
-		pal.count.textContent = q ? '%d / %d'.format(results.length, pool.length) : '%d %s'.format(pool.length, _('items'));
+		/* every page that matched, shown or not, and the provider's rows */
+		const total = q ? found.length + rows.length - results.length : 0;
+		pal.count.textContent = q ? N_(total, '%d result', '%d results', 'vantage-theme').format(total) : '';
 		this.setPaletteActive(0, true);
 	},
 
@@ -1215,7 +1692,7 @@ return baseclass.extend({
 			ev.preventDefault();
 			if (pal.items[pal.active]) this.runEntry(pal.items[pal.active].e);
 			break;
-		case 'Escape': ev.preventDefault(); this.closePalette(); break;
+		case 'Escape': ev.preventDefault(); ev.stopPropagation(); this.closePalette(); break;
 		case 'Tab': ev.preventDefault(); break;
 		}
 	},
@@ -1228,6 +1705,16 @@ return baseclass.extend({
 	setupKeys() {
 		const btn = document.getElementById('vt-search-btn');
 		if (btn) btn.addEventListener('click', () => this.openPalette());
+
+		/* a select whose list the page draws (customizable select) closes it
+		   on Escape; the modal under it (ui.cancelModal on #modal_overlay)
+		   must not take the same Escape and dismiss the dialog. Capture, as
+		   for the row menu. */
+		const openList = CSS.supports('selector(:open)') ? 'select:open' : null;
+		document.addEventListener('keydown', ev => {
+			if (openList && ev.key === 'Escape' && ev.target.closest && ev.target.closest(openList))
+				ev.stopPropagation();
+		}, true);
 
 		document.addEventListener('keydown', ev => {
 			if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && (ev.key === 'k' || ev.key === 'K')) {
@@ -1251,14 +1738,62 @@ return baseclass.extend({
 
 	/* -------------------------------------------------------- theme */
 
+	/* may this login save Appearance for every browser (header.ut): yes, relogin or no */
+	lookState() {
+		const v = this.root.getAttribute('data-vt-look-save');
+		return v === 'yes' || v === 'relogin' ? v : 'no';
+	},
+
+	/* one Appearance setting (LOOK), the value in force */
+	lookPref(name) {
+		const k = LOOK[name], mine = this.lookState() === 'yes' ? null : storageGet(k.own);
+		return lookValue(k.ok, [ (this.lookPending || {})[name], mine, this.root.getAttribute('data-vt-look-' + name), storageGet(k.before) ]);
+	},
+
+	/* Save one for every browser where this login may, else for this
+	   browser. Saves queue in order and only the latest pick of each is
+	   written; `apply` shows it at once and again when done. A save that
+	   fails leaves the pick shown on this page, with a note. */
+	setLook(name, value, apply) {
+		const k = LOOK[name];
+		const pending = this.lookPending || (this.lookPending = {});
+		const failed = this.lookFailed || (this.lookFailed = {});
+		if (k.ok.indexOf(value) < 0 || (pending[name] === value && !failed[name])) return;
+		if (this.lookState() !== 'yes') {
+			storageSet(k.own, value);
+			storageSet(k.before, value);
+			apply();
+			return;
+		}
+		const seqs = this.lookSeqs || (this.lookSeqs = {}), seq = seqs[name] = (seqs[name] || 0) + 1;
+		pending[name] = value;
+		delete failed[name];
+		apply();
+		const latest = () => seqs[name] === seq;
+		this.lookChain = (this.lookChain || Promise.resolve()).then(() => {
+			if (!latest()) return;
+			return lookWrite({ [name]: value })
+				.then(() => {
+					/* the router's value first, so other tabs never see a gap */
+					setLookAttr(this.root, name, value);
+					storageSet(LOOK_SYNC, JSON.stringify({ name: name, value: value, at: Date.now() }));
+					storageSet(k.before, value);
+					if (latest()) delete pending[name];
+				}, () => { if (latest()) failed[name] = true; });
+		}).then(apply);
+	},
+
+	/* a save that failed and wasn't done again: its pick stays shown, with a note */
+	lookFailing() {
+		return Object.keys(this.lookFailed || {}).length > 0;
+	},
+
 	themePref() {
-		const p = storageGet(THEME_KEY);
-		return (p === 'light' || p === 'dark') ? p : 'auto';
+		return this.lookPref('theme');
 	},
 
 	setTheme(pref) {
-		storageSet(THEME_KEY, pref === 'auto' ? null : pref);
-		this.applyTheme();
+		this.setLook('theme', pref, () => this.applyTheme());
 	},
 
 	applyTheme() {
@@ -1268,25 +1803,471 @@ return baseclass.extend({
 		this.root.setAttribute('data-darkmode', dark ? 'true' : 'false');
 		this.root.setAttribute('data-theme', pref);
 
+		/* the switch shows the pick (auto, sun, moon) and cycles: auto, the
+		   look the system doesn't have, the one it has, auto again, so the
+		   first click always changes the page; it saves as Appearance does */
+		const sys = sysDark ? 'dark' : 'light', other = sysDark ? 'light' : 'dark';
+		this.themeNext = pref === 'auto' ? other : pref === other ? sys : 'auto';
 		const btn = document.getElementById('vt-theme');
 		if (btn) {
-			const names = { auto: _('Auto'), light: _('Light'), dark: _('Dark') };
-			const label = '%s: %s'.format(_('Colour theme'), names[pref]) + (pref === 'auto' ? ' (%s)'.format(dark ? names.dark : names.light) : '');
+			const label = { auto: _('Follow system theme'), light: _('Use light theme'), dark: _('Use dark theme') }[this.themeNext];
 			btn.textContent = '';
-			btn.appendChild(svg(pref === 'auto' ? 'auto' : (pref === 'dark' ? 'moon' : 'sun'), 18));
+			btn.appendChild(svg(pref === 'auto' ? 'auto' : (dark ? 'moon' : 'sun'), 18));
 			btn.setAttribute('aria-label', label);
 			btn.setAttribute('title', label);
 		}
+		this.syncAppearance();
+	},
+
+	/* next to the logo: nothing unless set. In the rail when it is pinned
+	   open, else first in the top bar (vantage.css); text only */
+	brandPref() {
+		return this.lookPref('brand');
+	},
+
+	setBrandPref(pref) {
+		this.setLook('brand', pref, () => this.applyBrand());
+	},
+
+	applyBrand() {
+		const v = this.brandPref(), b = this.board;
+		const name = !b ? '' : v === 'hostname' ? (host.chipNames(b.hostname, '')[0] || '') : v === 'model' ? host.productName(b) : '';
+		[ 'vt-brand-name', 'vt-top-name' ].forEach(id => {
+			const el = document.getElementById(id);
+			if (!el) return;
+			if (el.textContent !== name) el.textContent = name;
+			el.title = name;
+			el.hidden = !name;
+		});
+		this.syncAppearance();
+	},
+
+	/* the login page's backdrop (login.js): grid packets unless set */
+	loginPref() {
+		return this.lookPref('login');
+	},
+
+	loginNames() {
+		return { grid: _('Grid'), stars: _('Starfield'), none: _('None', 'vantage-theme') };
+	},
+
+	setLoginPref(pref) {
+		this.setLook('login', pref, () => this.syncAppearance());
+	},
+
+	/* Vantage's dashboard, where this user may open it: its network path
+	   takes the same backdrops as the login page */
+	hasDashboard() {
+		return !!(this.admin && ui.menu.getChildren(this.admin).some(c => c.name === 'dashboard' && c.action && c.action.path === 'vantage/overview'));
+	},
+
+	backdropPref() {
+		return this.lookPref('backdrop');
+	},
+
+	setBackdropPref(pref) {
+		this.setLook('backdrop', pref, () => this.applyBackdrop());
+	},
+
+	/* the dashboard reads the one in force from data-vt-backdrop */
+	applyBackdrop() {
+		const v = this.backdropPref();
+		if (this.root.getAttribute('data-vt-backdrop') !== v) {
+			this.root.setAttribute('data-vt-backdrop', v);
+			window.dispatchEvent(new CustomEvent(BACKDROP_EVENT));
+		}
+		this.syncAppearance();
+	},
+
+	powerPref() {
+		return this.lookPref('power');
+	},
+
+	setPowerPref(pref) {
+		this.setLook('power', pref, () => this.applyPower());
+	},
+
+	/* the dashboard reads the one in force from data-vt-power; the
+	   refresh dot stops with it (vantage.css) */
+	applyPower() {
+		const v = this.powerPref();
+		if (this.root.getAttribute('data-vt-power') !== v) {
+			this.root.setAttribute('data-vt-power', v);
+			window.dispatchEvent(new CustomEvent(POWER_EVENT));
+		}
+		this.syncAppearance();
+	},
+
+	unfocusedPref() {
+		return this.lookPref('unfocused');
+	},
+
+	setUnfocusedPref(pref) {
+		this.setLook('unfocused', pref, () => this.applyUnfocused());
+	},
+
+	/* the dashboard reads the one in force from data-vt-unfocused; the
+	   refresh dot follows it too (setupIndicators) */
+	applyUnfocused() {
+		const v = this.unfocusedPref();
+		if (this.root.getAttribute('data-vt-unfocused') !== v) {
+			this.root.setAttribute('data-vt-unfocused', v);
+			window.dispatchEvent(new CustomEvent(UNFOCUSED_EVENT));
+		}
+		this.syncAppearance();
+	},
+
+	unitsPref() {
+		return this.lookPref('units');
+	},
+
+	setUnitsPref(pref) {
+		this.setLook('units', pref, () => this.applyUnits());
+	},
+
+	/* the dashboard reads the one in force from data-vt-units (fmt) */
+	applyUnits() {
+		const v = this.unitsPref();
+		if (this.root.getAttribute('data-vt-units') !== v) {
+			this.root.setAttribute('data-vt-units', v);
+			window.dispatchEvent(new CustomEvent(UNITS_EVENT));
+		}
+		this.syncAppearance();
 	},
 
 	setupTheme() {
-		const btn = document.getElementById('vt-theme');
-		const order = { auto: 'light', light: 'dark', dark: 'auto' };
-		if (btn) btn.addEventListener('click', () => this.setTheme(order[this.themePref()]));
+		const toggle = document.getElementById('vt-theme');
+		if (toggle) toggle.addEventListener('click', () => { if (this.themeNext) this.setTheme(this.themeNext); });
+		const btn = document.getElementById('vt-look');
+		if (btn) {
+			btn.addEventListener('click', () => {
+				if (this.appearBtn) this.closeAppearance(false);
+				else this.openAppearance(btn);
+			});
+			btn.addEventListener('keydown', ev => {
+				if (ev.key !== 'ArrowDown' || this.appearBtn) return;
+				ev.preventDefault();
+				this.openAppearance(btn);
+			});
+		}
 		const mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
 		if (mq && mq.addEventListener) mq.addEventListener('change', () => { if (this.themePref() === 'auto') this.applyTheme(); });
-		window.addEventListener('storage', ev => { if (ev.key === THEME_KEY) this.applyTheme(); });
+		/* a login that may save: this browser's private picks no longer count */
+		if (this.lookState() === 'yes') Object.keys(LOOK).forEach(n => storageSet(LOOK[n].own, null));
+		/* another tab of this browser changed one, or saved one on the router */
+		const keys = [ LOOK_SYNC ];
+		Object.keys(LOOK).forEach(n => keys.push(LOOK[n].own, LOOK[n].before));
+		window.addEventListener('storage', ev => {
+			/* the daily check, switched or answered in another tab */
+			if (ev.key === UPDATE_AUTO_KEY || ev.key === UPDATE_LAST_KEY) this.applyUpdate();
+			if (keys.indexOf(ev.key) < 0) return;
+			if (ev.key === LOOK_SYNC) {
+				let m = null;
+				try { m = JSON.parse(ev.newValue); } catch (e) {}
+				if (m && Object.prototype.hasOwnProperty.call(LOOK, m.name) && LOOK[m.name].ok.indexOf(m.value) >= 0) {
+					setLookAttr(this.root, m.name, m.value);
+					/* saved there: a pick that failed here is over */
+					if (this.lookPending) delete this.lookPending[m.name];
+					if (this.lookFailed) delete this.lookFailed[m.name];
+				}
+			}
+			this.applyTheme();
+			this.applyBackdrop();
+			this.applyPower();
+			this.applyUnfocused();
+			this.applyUnits();
+			this.applyBrand();
+		});
+		/* the dashboard's own picker (Customize), saved as Appearance's */
+		window.addEventListener(LOOK_SET_EVENT, ev => {
+			if (ev.detail && LOOK.backdrop.ok.indexOf(ev.detail) >= 0) {
+				ev.preventDefault();
+				this.setBackdropPref(ev.detail);
+			}
+		});
+		/* Customize's Done, for a login that may save; for any other it
+		   stays in that browser, which the dashboard says */
+		window.addEventListener(VIEW_SAVE_EVENT, ev => {
+			const d = ev.detail, values = {};
+			if (this.lookState() !== 'yes' || !d || !d.values || typeof d.done !== 'function') return;
+			Object.keys(d.values).forEach(n => { if (viewValue(n, d.values[n])) values[n] = d.values[n]; });
+			if (!Object.keys(values).length) return;
+			ev.preventDefault();
+			this.lookChain = (this.lookChain || Promise.resolve()).then(() => lookWrite(values))
+				.then(() => d.done(true), () => d.done(false)).catch(() => {});
+		});
 		this.applyTheme();
+		this.applyBackdrop();
+		this.applyPower();
+		this.applyUnfocused();
+		this.applyUnits();
+		this.applyBrand();
+		this.applyUpdate();
+	},
+
+	/* Appearance, under the gear button: the colour theme, the
+	   login background and, with the dashboard, the network path's
+	   background, each a native radio group (the arrow keys move
+	   within it) drawn as segments. Choices apply at once and stay open;
+	   Escape, Tab out of either end, a click outside, resizing or
+	   scrolling the page close it. */
+	/* one of Appearance's radio groups */
+	appearGroup(name, legend, opts, set) {
+		const look = { 'vt-colour': 'theme', 'vt-logo-name': 'brand', 'vt-login': 'login', 'vt-backdrop': 'backdrop', 'vt-units': 'units', 'vt-power': 'power', 'vt-unfocused': 'unfocused' }[name];
+		return E('fieldset', { 'class': 'vt-appear-set' }, [
+			E('legend', {}, [ legend ]),
+			E('div', { 'class': 'vt-appear-track' }, opts.map(o => {
+				const input = E('input', { 'type': 'radio', 'name': name, 'value': o[0] });
+				input.addEventListener('change', () => { if (input.checked) set(o[0]); });
+				/* the checked option fires no change: after a failed save, this is the retry */
+				input.addEventListener('click', () => { if (input.checked && (this.lookFailed || {})[look]) set(o[0]); });
+				/* data-text: the label's bold width kept (vantage.css), so
+				   a pick changes no column */
+				return E('label', { 'class': 'vt-appear-opt' }, [ input ].concat(o[2] ? [ svg(o[2], 16) ] : [], [ E('span', { 'data-text': o[1] }, [ o[1] ]) ]));
+			}))
+		]);
+	},
+
+	/* the network path's group, once the menu says the dashboard is here */
+	backdropGroup() {
+		const n = this.loginNames();
+		return this.appearGroup('vt-backdrop', _('Network path background'), [ [ 'grid', n.grid ], [ 'stars', n.stars ], [ 'none', n.none ] ], v => this.setBackdropPref(v));
+	},
+
+	/* the dashboard's groups: its network path's background, its traffic's
+	   unit, and the low-power mode */
+	dashboardGroups() {
+		return [ this.backdropGroup(),
+			this.appearGroup('vt-units', _('Speed units'), [ [ 'bits', _('Bits/s') ], [ 'bytes', _('Bytes/s') ] ], v => this.setUnitsPref(v)),
+			this.appearGroup('vt-power', _('Low-power router'), [ [ 'normal', _('Off') ], [ 'low', _('On') ] ], v => this.setPowerPref(v)) ];
+	},
+
+	appearanceEl() {
+		if (this.appear) return this.appear;
+		const group = (name, legend, opts, set) => this.appearGroup(name, legend, opts, set);
+		const login = this.loginNames();
+		const box = E('div', { 'id': 'vt-appearance', 'class': 'vt-appearance', 'role': 'dialog', 'aria-label': _('Appearance', 'vantage-theme'), 'hidden': 'hidden' }, [
+			group('vt-colour', _('Colour theme'), [
+				[ 'auto', _('Auto', 'vantage-theme'), 'auto' ], [ 'light', _('Light', 'vantage-theme'), 'sun' ], [ 'dark', _('Dark', 'vantage-theme'), 'moon' ]
+			], v => this.setTheme(v)),
+			group('vt-logo-name', _('Next to the logo'), [
+				[ 'none', _('Logo only') ], [ 'hostname', _('Hostname') ], [ 'model', _('Model') ]
+			], v => this.setBrandPref(v)),
+			group('vt-login', _('Login background'), [ [ 'grid', login.grid ], [ 'stars', login.stars ], [ 'none', login.none ] ], v => this.setLoginPref(v))
+		].concat(this.hasDashboard() ? this.dashboardGroups() : [], [
+			(this.appearUnfocused = group('vt-unfocused', _('Motion when not in focus'), [ [ 'still', _('Off') ], [ 'moving', _('On') ] ], v => this.setUnfocusedPref(v))),
+			/* where the picks are kept, when not for every browser (syncAppearance) */
+			(this.appearNote = E('p', { 'class': 'vt-appear-note', 'role': 'status', 'hidden': 'hidden' })),
+			this.updateGroup(),
+			this.versionEl()
+		]));
+		box.addEventListener('keydown', ev => {
+			if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); this.closeAppearance(true); }
+			else if (ev.key === 'Tab') {
+				const sets = box.querySelectorAll('fieldset');
+				/* forward, the panel ends at the update check's link when it has one */
+				const last = Array.prototype.slice.call(box.querySelectorAll('.vt-appear-ver button, .vt-appear-ver a[href]')).pop();
+				const edge = ev.shiftKey ? sets[0] : (last || sets[sets.length - 1]);
+				if (edge.contains(ev.target)) { ev.preventDefault(); this.closeAppearance(true); }
+			}
+		});
+		document.addEventListener('keydown', ev => {
+			if (!this.appearBtn || box.contains(ev.target)) return;
+			if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); this.closeAppearance(true); }
+		}, true);
+		document.addEventListener('pointerdown', ev => {
+			if (this.appearBtn && !box.contains(ev.target) && !this.appearBtn.contains(ev.target)) this.closeAppearance(false);
+		}, true);
+		window.addEventListener('resize', () => this.closeAppearance(false));
+		window.addEventListener('scroll', ev => { if (!box.contains(ev.target)) this.closeAppearance(false); }, true);
+		document.body.appendChild(box);
+		return (this.appear = box);
+	},
+
+	/* "Vantage 1.0.16 · Check for updates", and what the check found */
+	versionEl() {
+		const btn = E('button', { 'type': 'button', 'class': 'vt-appear-check' }, [ _('Check for updates') ]);
+		const out = E('span', { 'class': 'vt-appear-update', 'role': 'status', 'hidden': 'hidden' });
+		btn.addEventListener('click', () => this.checkUpdates(btn, out));
+		this.updateOut = out;
+		this.applyUpdate();
+		return E('p', { 'class': 'vt-appear-ver' }, [ E('span', { 'class': 'vt-appear-num' }, [ 'Vantage ' + VERSION ]), ' · ', btn, out ]);
+	},
+
+	releaseLink(label) {
+		return E('a', { 'href': 'https://github.com/anothaDev/luci-theme-vantage/releases/latest', 'target': '_blank', 'rel': 'noopener noreferrer' }, [ label ]);
+	},
+
+	/* "Version 1.0.17 is available. What's new" */
+	tellNewer(out, latest) {
+		out.textContent = '';
+		out.appendChild(document.createTextNode(_('Version %s is available.').format(latest) + ' '));
+		out.appendChild(this.releaseLink(_('What\'s new')));
+		out.hidden = false;
+	},
+
+	/* The theme's version in the list: the one place that asks, for the
+	   manual check and the daily one. With the daily check on, the try
+	   is kept before the answer comes (a reload or another tab asks
+	   nothing more that day, and a try that fails still counts, with what
+	   was known before), then what the list had. */
+	askLatest(daily) {
+		const at = Date.now(), mem = updateMemory(storageGet(UPDATE_LAST_KEY));
+		const keep = latest => { if (this.updatePref() === 'on') storageSet(UPDATE_LAST_KEY, JSON.stringify({ at: at, latest: latest })); };
+		keep(mem ? mem.latest : null);
+		/* the daily check asks only once its try is kept: where the
+		   browser's storage takes no more, every page would ask again */
+		const kept = updateMemory(storageGet(UPDATE_LAST_KEY));
+		if (daily && !(kept && kept.at === at)) return Promise.reject(new Error('try not kept'));
+		const ctl = window.AbortController ? new AbortController() : null;
+		const timer = ctl ? setTimeout(() => ctl.abort(), 10000) : 0;
+		return fetch(UPDATE_INDEX, { cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', signal: ctl ? ctl.signal : undefined })
+			.then(r => {
+				const size = r.headers && r.headers.get ? +r.headers.get('content-length') : 0;
+				return r.ok && !(size > UPDATE_MAX) ? r.text() : Promise.reject(new Error(r.ok ? 'too large' : 'HTTP ' + r.status));
+			})
+			.then(text => {
+				clearTimeout(timer);
+				const latest = listedVersion(String(text).slice(0, UPDATE_MAX));
+				if (!latest) throw new Error('no version');
+				keep(latest);
+				this.applyUpdate();
+				return latest;
+			}, e => { clearTimeout(timer); throw e; });
+	},
+
+	checkUpdates(btn, out) {
+		/* aria-disabled, not disabled: a disabled button drops the focus,
+		   and with it the panel's keys */
+		if (btn.getAttribute('aria-disabled') === 'true') return;
+		btn.setAttribute('aria-disabled', 'true');
+		out.textContent = _('Checking…');
+		out.hidden = false;
+		this.askLatest()
+			.then(latest => {
+				if (newerVersion(versionParts(latest), versionParts(VERSION))) this.tellNewer(out, latest);
+				else out.textContent = _('Up to date');
+			})
+			/* offline, or a router whose pages forbid the request (a
+			   Content-Security-Policy): the release page still opens */
+			.catch(e => {
+				if (window.console) console.warn('vantage: update check', e);
+				out.textContent = _('Could not check for updates.') + ' ';
+				out.appendChild(this.releaseLink(_('See the latest release')));
+			})
+			/* shown again: a notice that went meanwhile hid the line (applyUpdate) */
+			.then(() => { out.hidden = false; btn.removeAttribute('aria-disabled'); });
+	},
+
+	/* ------------------------------------------------ the daily check */
+
+	updatePref() {
+		return storageGet(UPDATE_AUTO_KEY) === 'on' ? 'on' : 'off';
+	},
+
+	/* This browser's alone, so not through setLook: nothing of it is
+	   saved on the router. Switched off, what it learned goes too; on,
+	   the first check comes with the next page. */
+	setUpdatePref(pref) {
+		storageSet(UPDATE_AUTO_KEY, pref === 'on' ? 'on' : null);
+		if (pref !== 'on') storageSet(UPDATE_LAST_KEY, null);
+		this.applyUpdate();
+	},
+
+	/* its group, with what it costs in a line under it */
+	updateGroup() {
+		const set = this.appearGroup('vt-update', _('Daily update check'), [ [ 'off', _('Off') ], [ 'on', _('On') ] ], v => this.setUpdatePref(v));
+		set.setAttribute('aria-describedby', 'vt-update-help');
+		set.appendChild(E('p', { 'class': 'vt-appear-note', 'id': 'vt-update-help' }, [
+			_('Once a day this browser reads the project\'s package list on GitHub Pages, which shows GitHub this computer\'s IP address and the address this page was opened at. For this browser only.') ]));
+		return set;
+	},
+
+	/* A newer version the daily check knows of: a dot on the gear, said
+	   in its label, and under Appearance the line the manual check
+	   shows. Gone once this version is that one or a later one, or the
+	   check is switched off. */
+	applyUpdate() {
+		const latest = this.updatePref() === 'on' ? newerKnown(updateMemory(storageGet(UPDATE_LAST_KEY)), VERSION) : null;
+		const btn = document.getElementById('vt-look'), out = this.updateOut;
+		if (btn) {
+			const name = _('Appearance', 'vantage-theme');
+			const label = latest ? '%s: %s'.format(name, _('Version %s is available.').format(latest)) : name;
+			btn.toggleAttribute('data-vt-update', !!latest);
+			if (btn.getAttribute('aria-label') !== label) {
+				btn.setAttribute('aria-label', label);
+				btn.setAttribute('title', label);
+			}
+		}
+		if (out && latest !== (this.updateTold || null)) {
+			if (latest) this.tellNewer(out, latest);
+			else { out.textContent = ''; out.hidden = true; }
+			this.updateTold = latest;
+		}
+		this.syncAppearance();
+	},
+
+	/* Once this page is idle, so it waits for nothing: never from a tab
+	   out of view or a page without a login (the login page does not
+	   load this script either), and not within UPDATE_EVERY of the last
+	   try, whichever page or tab of this browser made it. A check that
+	   fails says nothing. A page left open for days, or loaded in a tab
+	   out of view, checks when its tab comes into view. */
+	setupUpdate() {
+		if (document.addEventListener) document.addEventListener('visibilitychange', () => this.dailyCheck());
+		if (this.updatePref() !== 'on') return;
+		if (window.requestIdleCallback) window.requestIdleCallback(() => this.dailyCheck());
+		else setTimeout(() => this.dailyCheck(), 2000);
+	},
+
+	dailyCheck() {
+		if (this.updatePref() !== 'on' || document.visibilityState !== 'visible' || !document.body.classList.contains('vt-auth')) return;
+		if (updateDue(updateMemory(storageGet(UPDATE_LAST_KEY)), Date.now())) this.askLatest(true).catch(() => {});
+	},
+
+	syncAppearance() {
+		if (!this.appear) return;
+		const now = { 'vt-colour': this.themePref(), 'vt-logo-name': this.brandPref(), 'vt-login': this.loginPref(), 'vt-backdrop': this.backdropPref(), 'vt-units': this.unitsPref(), 'vt-power': this.powerPref(), 'vt-unfocused': this.unfocusedPref(), 'vt-update': this.updatePref() };
+		Array.prototype.forEach.call(this.appear.querySelectorAll('input[type="radio"]'), r => { r.checked = (now[r.name] === r.value); });
+		const state = this.lookState();
+		const note = state === 'relogin' ? _('Log in again to save Appearance for every browser.')
+			: state !== 'yes' ? _('Saved in this browser only.')
+			: this.lookFailing() ? _('Could not save this for every browser. Try again.') : '';
+		if (this.appearNote) {
+			if (this.appearNote.textContent !== note) this.appearNote.textContent = note;
+			this.appearNote.hidden = !note;
+		}
+	},
+
+	openAppearance(btn) {
+		this.closeActMenu(false);
+		this.closeHelp(false);
+		const box = this.appearanceEl();
+		this.syncAppearance();
+		box.style.maxHeight = '';
+		box.hidden = false;
+		/* below the button, right edges aligned, above the phone's bottom bar */
+		const r = btn.getBoundingClientRect(), w = box.offsetWidth;
+		const rail = this.mqMobile && this.mqMobile.matches ? document.querySelector('.vt-rail') : null;
+		const floor = rail ? rail.getBoundingClientRect().top : window.innerHeight;
+		const top = r.bottom + 6;
+		if (box.offsetHeight > floor - 8 - top) box.style.maxHeight = Math.max(0, floor - 8 - top).toFixed(0) + 'px';
+		box.style.top = top.toFixed(0) + 'px';
+		box.style.left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8)).toFixed(0) + 'px';
+		btn.setAttribute('aria-controls', 'vt-appearance');
+		btn.setAttribute('aria-expanded', 'true');
+		this.appearBtn = btn;
+		const on = box.querySelector('input:checked');
+		if (on) on.focus();
+	},
+
+	closeAppearance(refocus) {
+		const btn = this.appearBtn;
+		if (!btn) return;
+		this.appearBtn = null;
+		this.appear.hidden = true;
+		btn.setAttribute('aria-expanded', 'false');
+		if (refocus && btn.isConnected) btn.focus();
 	},
 
 	/* --------------------------------------------------- host chip */
@@ -1297,25 +2278,42 @@ return baseclass.extend({
 			if (!board || !board.hostname) return;
 			const product = host.productName(board);
 			this.hostname = board.hostname;
+			this.board = board;
 			this.updateTitle();
+			this.applyBrand();
 			if (!chip) return;
 			chip.textContent = '';
 			/* device strings go in as text nodes (E() would parse a string as HTML) */
 			const text = v => [ document.createTextNode(String(v)) ];
-			chip.appendChild(E('b', {}, text(board.hostname)));
-			if (product) {
-				chip.appendChild(E('span', { 'class': 'vt-host-sep', 'aria-hidden': 'true' }, text('·')));
-				chip.appendChild(E('span', {}, text(product)));
-			}
+			host.chipNames(board.hostname, product).forEach((name, i) => {
+				if (i) chip.appendChild(E('span', { 'class': 'vt-host-sep', 'aria-hidden': 'true' }, text('·')));
+				chip.appendChild(i ? E('span', {}, text(name)) : E('b', {}, text(name)));
+			});
 			const rel = board.release && board.release.description;
 			chip.setAttribute('title', [ board.hostname, product, rel ].filter(Boolean).join('\n'));
 			chip.hidden = false;
 		});
 	},
 
+	/* "Page · hostname", with alertMark in front while the dashboard
+	   reports a problem, so a tab left in the background shows it. The
+	   one place that writes the title: the level is read from <html> each
+	   time, so whichever comes last (the menu, the hostname, the
+	   dashboard's word) finds the rest. */
 	updateTitle() {
 		const parts = [ this.pageTitle, this.hostname ].filter(Boolean);
-		if (parts.length) document.title = parts.join(' · ');
+		if (!parts.length) return;
+		const title = alertMark(this.root.getAttribute('data-vt-alert'), this.root.getAttribute('data-vt-alert-count')) + parts.join(' · ');
+		if (document.title !== title) document.title = title;
+	},
+
+	/* The dashboard sets its level again at every poll: the title is
+	   written only when it changes (updateTitle). Any other page, or no
+	   dashboard, sets nothing and the title stays as it was; leaving the
+	   dashboard loads a new page, which starts without the mark. */
+	watchAlert() {
+		if (!window.MutationObserver) return;
+		new window.MutationObserver(() => this.updateTitle()).observe(this.root, { attributes: true, attributeFilter: [ 'data-vt-alert', 'data-vt-alert-count' ] });
 	},
 
 	/* -------------------------------------------------- indicators */
@@ -1348,6 +2346,87 @@ return baseclass.extend({
 		};
 		new MutationObserver(decorate).observe(box, { childList: true, subtree: true, characterData: true });
 		decorate();
+		/* another window has the focus: the refresh dot's pulse stops
+		   (vantage.css), as a moving part keeps the browser drawing;
+		   not with Motion when not in focus on */
+		const root = document.documentElement;
+		const focus = () => root.toggleAttribute('data-vt-blur', !document.hasFocus() && root.getAttribute('data-vt-unfocused') !== 'moving');
+		window.addEventListener('blur', focus);
+		window.addEventListener('focus', focus);
+		window.addEventListener(UNFOCUSED_EVENT, focus);
+		focus();
+		this.setupMotionClock(box);
+	},
+
+	/* ------------------------------------------------- motion clock */
+
+	/* the dot's pulse (vt-live, vt-live-soft; vantage.css) paused as it
+	   starts and stepped from here; one CSS takes away (blur, Low-power
+	   router, the poll stopped) goes idle and is dropped */
+	setupMotionClock(box) {
+		const c = this.clock = { anims: [], raf: 0, timer: 0, last: 0, appAt: 0, watchdog: 0 };
+		box.addEventListener('animationstart', ev => {
+			if (!/^vt-live/.test(ev.animationName || '') || typeof ev.target.getAnimations !== 'function') return;
+			ev.target.getAnimations({ subtree: true }).forEach(a => {
+				if (!a.effect || !/^vt-live/.test(a.animationName || '') || a.playState !== 'running' || c.anims.some(x => x.a === a)) return;
+				a.pause();
+				const tm = a.effect.getTiming();
+				c.anims.push({ a, dur: typeof tm.duration === 'number' && tm.duration > 0 ? tm.duration : 0, at: 0 });
+			});
+			this.kickMotion();
+		});
+		/* one CSS took away (blur, Low-power router, the poll stopped, the
+		   dot's state changed) or ended (reduced motion switched on: it
+		   turns finite, and a paused one stays "paused") is dropped on its
+		   event, the animation the event is for and any other cancelled
+		   one; at the next step (stepPulses) when that comes first */
+		const isFor = (a, ev) => !!a.effect && a.effect.target === ev.target && (a.effect.pseudoElement || '') === (ev.pseudoElement || '') && a.animationName === ev.animationName;
+		const drop = ev => { if (/^vt-live/.test(ev.animationName || '')) c.anims = c.anims.filter(x => !isFor(x.a, ev) && x.a.playState !== 'idle'); };
+		box.addEventListener('animationcancel', drop);
+		box.addEventListener('animationend', drop);
+		/* the dashboard's clock: its frames are this page's */
+		window.addEventListener(MOTION_EVENT, ev => {
+			c.appAt = performance.now();
+			if (c.timer) { window.clearTimeout(c.timer); c.timer = 0; }
+			if (c.raf) { window.cancelAnimationFrame(c.raf); c.raf = 0; }
+			this.stepPulses(ev.detail && +ev.detail.dt || 0);
+			/* and when they stop, this page's own again */
+			if (c.watchdog) window.clearTimeout(c.watchdog);
+			c.watchdog = window.setTimeout(() => { c.watchdog = 0; c.appAt = 0; c.last = 0; this.kickMotion(); }, 4 * MOTION_MS);
+		});
+	},
+
+	stepPulses(dt) {
+		const c = this.clock;
+		/* one CSS cancelled since the last step is dropped, not stepped: a
+		   time written to a cancelled animation brings it back, paused,
+		   with nothing left to stop it (its animationcancel comes after).
+		   Asking brings the style up to date once a step, the first time */
+		c.anims = c.anims.filter(x => x.a.playState !== 'idle');
+		/* the time is kept here, never read back: reading a CSS animation's
+		   currentTime makes the browser bring the style up to date first */
+		c.anims.forEach(x => {
+			let t = x.at + dt;
+			if (x.dur > 0 && t >= x.dur) t -= Math.floor(t / x.dur) * x.dur;
+			x.at = t;
+			x.a.currentTime = t;
+		});
+	},
+
+	kickMotion() {
+		const c = this.clock;
+		if (!c || c.raf || c.timer || c.appAt || !c.anims.length) return;
+		c.last = 0;
+		c.raf = window.requestAnimationFrame(t => this.tickMotion(t));
+	},
+
+	tickMotion(t) {
+		const c = this.clock;
+		c.raf = 0;
+		if (!c.anims.length || c.appAt) { c.last = 0; return; }
+		this.stepPulses(c.last ? Math.min(t - c.last, 4 * MOTION_MS) : 0);
+		c.last = t;
+		c.timer = window.setTimeout(() => { c.timer = 0; if (!c.raf) c.raf = window.requestAnimationFrame(t => this.tickMotion(t)); }, MOTION_MS - 12);
 	},
 
 	/* ------------------------------------------ technical numerals */
@@ -1359,10 +2438,16 @@ return baseclass.extend({
 		if (document.body.getAttribute('data-page') === 'admin-dashboard') return;
 		let queued = false;
 		const skip = 'input,select,textarea,button,.btn,.cbi-button,.cbi-dropdown,img,.ifacebadge,.zonebadge,.cbi-progressbar,table,.table';
+		/* columns of numbers and addresses under a translated title (#111) */
+		const lang = document.documentElement.lang, nowrap = nowrapTitles(_, lang);
 		const scan = () => {
 			queued = false;
 			main.querySelectorAll('td, .td, .ifacebox-body > span > span').forEach(cell => {
 				if (cell.closest('.vt-app')) return;
+				if (nowrap.size && cell._vtNowrap === undefined) {
+					cell._vtNowrap = !cell.classList.contains('cbi-value-field') && nowrap.has(titleKey(cell.getAttribute('data-title'), lang));
+					if (cell._vtNowrap) cell.classList.add('vt-nowrap');
+				}
 				const text = cell.textContent;
 				if (cell._vtText === text) return;
 				cell._vtText = text;
@@ -1409,8 +2494,11 @@ return baseclass.extend({
 		this.formsQueued = false;
 		this.helpSeq = 0;
 		this.helpSizes = window.ResizeObserver ? new ResizeObserver(entries => this.fitHelps(entries.map(e => e.target))) : null;
+		/* not for the dashboard's own redraws (each poll): it holds no
+		   LuCI form; a modal opened over it sits outside it */
+		const inApp = r => r.target.nodeType === 1 && !!r.target.closest('.vt-app');
 		if (window.MutationObserver)
-			new MutationObserver(() => this.queueForms()).observe(document.body, { childList: true, subtree: true });
+			new MutationObserver(records => { if (!records.every(inApp)) this.queueForms(); }).observe(document.body, { childList: true, subtree: true });
 		this.decorateForms();
 	},
 
@@ -1424,10 +2512,10 @@ return baseclass.extend({
 	},
 
 	decorateForms() {
-		document.querySelectorAll('.cbi-value > .cbi-value-title + .cbi-value-field > .cbi-value-description:not(.vt-help-text)')
+		/* document.querySelectorAll('.cbi-value > .cbi-value-title + .cbi-value-field > .cbi-value-description:not(.vt-help-text)')
 			.forEach(desc => this.addFieldHelp(desc));
 		document.querySelectorAll(':is(.cbi-map-descr, .cbi-section-descr):not(:has(> .vt-help))')
-			.forEach(desc => this.addIntroHelp(desc));
+			.forEach(desc => this.addIntroHelp(desc)); */
 		this.markRepeats();
 		this.decorateRowActions();
 	},
@@ -1499,7 +2587,7 @@ return baseclass.extend({
 		const btn = E('button', {
 			'type': 'button', 'class': 'cbi-button cbi-button-neutral vt-acts-more',
 			'aria-haspopup': 'menu', 'aria-expanded': 'false', 'aria-controls': 'vt-actmenu',
-			'aria-label': _('More actions'), 'title': _('More actions')
+			'aria-label': _('More actions', 'vantage-theme'), 'title': _('More actions', 'vantage-theme')
 		}, [ svg('more', 18) ]);
 		btn.addEventListener('click', ev => {
 			ev.preventDefault();
@@ -1516,7 +2604,7 @@ return baseclass.extend({
 
 	actMenuEl() {
 		if (this.actMenu) return this.actMenu;
-		const menu = E('div', { 'id': 'vt-actmenu', 'class': 'vt-actmenu', 'role': 'menu', 'aria-label': _('More actions'), 'hidden': 'hidden' });
+		const menu = E('div', { 'id': 'vt-actmenu', 'class': 'vt-actmenu', 'role': 'menu', 'aria-label': _('More actions', 'vantage-theme'), 'hidden': 'hidden' });
 		menu.addEventListener('keydown', ev => {
 			const items = Array.prototype.filter.call(menu.querySelectorAll('[role="menuitem"]'), n => !n.disabled);
 			const i = items.indexOf(document.activeElement);
@@ -1634,69 +2722,75 @@ return baseclass.extend({
 		if (refocus && btn.isConnected) btn.focus();
 	},
 
-	/* Help text shows its first line; (i) unfolds the rest. LuCI also puts
-	   warnings here, so none is hidden whole: its start stays visible.
+	/* Help text that fits on one line shows as it is. Longer text folds to
+	   one line, which ends after the first sentence or fades out, and (i)
+	   shows all of it in a box over the page. LuCI also puts warnings here,
+	   as a paragraph that opens with a label ("Note:", "注意："), so text
+	   with one of those never folds.
 	   Field help: the button sits in the label column, after the field,
 	   because LuCI's label click handler finds the widget through
 	   nextElementSibling. */
 	addFieldHelp(desc) {
 		const row = desc.parentNode.parentNode;
 		const title = row.querySelector(':scope > .cbi-value-title');
-		row.appendChild(this.helpToggle(desc, row, _('Show full help: %s').format(title.textContent.trim()), _('Show full help')));
+		row.appendChild(this.helpToggle(desc, row, _('Show full help: %s').format(title.textContent.trim())));
 	},
 
 	/* Page and section intros: the button leads the first line, inside the
 	   description, since nothing may stand between LuCI's siblings (ui.tabs
 	   finds a tab menu as its pane group's previous sibling). The fold needs
 	   the button, so a view that rewrote the text would show it whole until
-	   the next pass adds the button again. The cut-off line unfolds on a
-	   click too, a bigger target on touch than the icon. */
+	   the next pass adds the button again. The folded line opens the box on
+	   a click too, a bigger target on touch than the icon. */
 	addIntroHelp(desc) {
 		if (desc.closest('.vt-app') || !desc.textContent.trim()) return;
-		desc.insertBefore(this.helpToggle(desc, desc, _('Show full description'), _('Show full description')), desc.firstChild);
+		desc.insertBefore(this.helpToggle(desc, desc, _('Show full description')), desc.firstChild);
 		if (desc._vtIntroClick) return;
 		desc._vtIntroClick = true;
 		desc.addEventListener('click', ev => {
 			const btn = desc.querySelector(':scope > .vt-help');
-			if (!btn || btn.hidden || desc.getAttribute('data-v-help') !== 'closed') return;
-			if (ev.target.closest('a, button') || String(window.getSelection())) return;
-			btn.click();
+			if (!btn || btn.hidden || btn.contains(ev.target) || ev.target.closest('a')) return;
+			if (String(window.getSelection())) return;
+			if (this.helpBtn === btn && this.helpPinned) this.closeHelp(false);
+			else this.openHelp(btn, desc, true, false);
 		});
 	},
 
-	/* The (i) button for desc. Its state lives on holder (the field row, or
-	   the intro itself) as data-v-help, which the CSS folds by. */
-	helpToggle(desc, holder, label, title) {
-		const state = holder.getAttribute('data-v-help') || 'closed';
-		holder.setAttribute('data-v-help', state);
+	/* The (i) button for desc. Whether desc folds lives on holder (the field
+	   row, or the intro itself) as data-v-help, which the CSS folds by. The
+	   box opens on hover and on keyboard focus, and a click or tap pins it. */
+	helpToggle(desc, holder, label) {
+		holder.setAttribute('data-v-help', this.helpSizes ? 'fold' : 'show');
 		desc.classList.add('vt-help-text');
 		if (!desc.id) desc.id = 'vt-help-' + (++this.helpSeq);
 		const btn = E('button', {
 			'class': 'vt-help', 'type': 'button', 'hidden': '',
-			'aria-expanded': String(state === 'open'), 'aria-controls': desc.id,
-			'aria-label': label, 'title': title,
-			'click': () => {
-				const open = holder.getAttribute('data-v-help') !== 'open';
-				holder.setAttribute('data-v-help', open ? 'open' : 'closed');
-				btn.setAttribute('aria-expanded', String(open));
-				this.fitHelp(desc);
+			'aria-expanded': 'false', 'aria-controls': 'vt-help-pop', 'aria-describedby': desc.id,
+			'aria-label': label,
+			'click': ev => {
+				if (this.helpBtn === btn && this.helpPinned) this.closeHelp(false);
+				else this.openHelp(btn, desc, true, ev.detail === 0);
+			},
+			'mouseenter': () => this.hoverHelp(btn, desc),
+			'mouseleave': () => this.leaveHelp(),
+			'focus': () => { if (!this.helpRefocus && btn.matches(':focus-visible')) this.openHelp(btn, desc, false, false); },
+			'blur': ev => {
+				if (!this.helpPinned && this.helpBtn === btn && !(this.helpPop && this.helpPop.contains(ev.relatedTarget)))
+					this.closeHelp(false);
 			}
 		}, [ svg('info', 16) ]);
 		desc._vtHelp = { btn: btn, holder: holder };
 		if (this.helpSizes) this.helpSizes.observe(desc);
-		else btn.hidden = false;
 		return btn;
 	},
 
-	/* (i) shows only while the one-line clamp cuts the text. Text that is
-	   not displayed (another tab, an unmet dependency) measures 0 and waits
-	   for the next resize notification. */
-	fitHelp(desc) {
-		this.fitHelps([ desc ]);
-	},
-
-	/* all sizes are read before any button changes: a write between two
-	   reads forced a layout per field (66 when the Wireless modal opened) */
+	/* (i) shows, and the text folds to a line, while the text needs more
+	   than one line. Text that is not displayed (another tab, an unmet
+	   dependency) measures 0 and waits for the next resize notification.
+	   All sizes are read before any button changes: a write between two
+	   reads forced a layout per field (66 when the Wireless modal opened).
+	   Folded, the text still measures its full height. The line's end is
+	   set as data-v-end ("cut" at --vt-cut, or "fade"), which the CSS reads. */
 	fitHelps(descs) {
 		const fits = [];
 		for (const desc of descs) {
@@ -1705,12 +2799,152 @@ return baseclass.extend({
 				continue;
 			}
 			const h = desc._vtHelp;
-			if (!h || !h.btn.isConnected || !desc.clientHeight) continue;
-			fits.push([ h, desc.scrollHeight > desc.clientHeight + 1 ]);
+			if (!h || !h.btn.isConnected || !desc.clientWidth) continue;
+			const cs = window.getComputedStyle(desc);
+			const line = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.6;
+			const text = desc.scrollHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
+			const fold = text > line * 1.5 && !helpWarns(desc);
+			const cut = fold ? helpCut(desc, cs, line) : null;
+			fits.push([ h, desc, fold, cut, line, fold && cut === null ? helpLineEnd(desc, cs, line) : null ]);
 		}
-		for (const [ h, cut ] of fits) {
-			const hide = !cut && h.holder.getAttribute('data-v-help') !== 'open';
-			if (h.btn.hidden !== hide) h.btn.hidden = hide;
+		/* an intro's (i) sits in its line, so showing it moves the text:
+		   that line is measured again once laid out */
+		const again = [];
+		for (const [ h, desc, fold, cut, line, end ] of fits) {
+			const state = fold ? 'fold' : 'show';
+			if (h.holder.getAttribute('data-v-help') !== state) h.holder.setAttribute('data-v-help', state);
+			if (h.btn.hidden === fold) {
+				h.btn.hidden = !fold;
+				if (fold && h.holder === desc) again.push(desc);
+			}
+			if (!fold) {
+				desc.removeAttribute('data-v-end');
+				if (this.helpBtn === h.btn) this.closeHelp(false);
+				continue;
+			}
+			desc.setAttribute('data-v-end', cut === null ? 'fade' : 'cut');
+			if (cut !== null || end !== null) desc.style.setProperty('--vt-cut', (cut !== null ? cut : end).toFixed(0) + 'px');
+			else desc.style.removeProperty('--vt-cut');
+			desc.style.setProperty('--vt-line', line.toFixed(2) + 'px');
+		}
+		if (again.length) window.requestAnimationFrame(() => this.fitHelps(again));
+	},
+
+	/* the box (i) opens: one for the page, filled with a copy of the
+	   description's nodes, so LuCI's own stay where they are */
+	helpPopEl() {
+		if (this.helpPop) return this.helpPop;
+		const pop = E('div', { 'id': 'vt-help-pop', 'class': 'vt-help-pop', 'hidden': 'hidden' });
+		pop.addEventListener('mouseenter', () => window.clearTimeout(this.helpTimer));
+		pop.addEventListener('mouseleave', () => this.leaveHelp());
+		/* opened from the keyboard, focus is in the box: Tab past either end
+		   goes back on (i) first, so it goes on from the field, not from the
+		   box at the end of the page */
+		pop.addEventListener('keydown', ev => {
+			if (ev.key !== 'Tab') return;
+			const stops = pop.querySelectorAll('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])');
+			const i = Array.prototype.indexOf.call(stops, document.activeElement);
+			if (ev.shiftKey ? i <= 0 : i === stops.length - 1) this.closeHelp(true);
+		});
+		pop.addEventListener('focusout', ev => {
+			if (this.helpBtn && !pop.contains(ev.relatedTarget) && ev.relatedTarget !== this.helpBtn) this.closeHelp(false);
+		});
+		/* capture, so a modal under it does not take the same Escape; an
+		   open list takes its own first. Focus goes back to (i) only from
+		   the box or (i), not from a field typed in under a hover box. */
+		const openList = CSS.supports('selector(:open)') ? 'select:open, .cbi-dropdown[open]' : '.cbi-dropdown[open]';
+		document.addEventListener('keydown', ev => {
+			if (!this.helpBtn || ev.key !== 'Escape' || (ev.target.closest && ev.target.closest(openList))) return;
+			ev.preventDefault();
+			ev.stopPropagation();
+			const from = document.activeElement;
+			this.closeHelp(pop.contains(from) || from === this.helpBtn);
+		}, true);
+		/* a click on an intro's folded line toggles the box itself */
+		document.addEventListener('pointerdown', ev => {
+			if (!this.helpBtn || pop.contains(ev.target) || this.helpBtn.contains(ev.target)) return;
+			const intro = this.helpBtn.parentNode;
+			if (intro.matches('.cbi-map-descr, .cbi-section-descr') && intro.contains(ev.target)) return;
+			this.closeHelp(false);
+		}, true);
+		window.addEventListener('resize', () => this.closeHelp(false));
+		window.addEventListener('scroll', ev => { if (!pop.contains(ev.target)) this.closeHelp(false); }, true);
+		document.body.appendChild(pop);
+		return (this.helpPop = pop);
+	},
+
+	hoverHelp(btn, desc) {
+		if (this.helpPinned) return;
+		window.clearTimeout(this.helpTimer);
+		this.helpTimer = window.setTimeout(() => this.openHelp(btn, desc, false, false), this.helpBtn ? 0 : 120);
+	},
+
+	leaveHelp() {
+		if (this.helpPinned) return;
+		window.clearTimeout(this.helpTimer);
+		this.helpTimer = window.setTimeout(() => this.closeHelp(false), 160);
+	},
+
+	openHelp(btn, desc, pinned, focusIn) {
+		window.clearTimeout(this.helpTimer);
+		const pop = this.helpPopEl();
+		const enter = () => {
+			const link = focusIn && pop.querySelector('a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])');
+			if (link) link.focus();
+		};
+		/* open already (on hover or keyboard focus): a click pins it, Enter
+		   also moves into it */
+		if (this.helpBtn === btn) {
+			this.helpPinned = this.helpPinned || pinned;
+			enter();
+			return;
+		}
+		this.closeHelp(false);
+		const copy = [];
+		desc.childNodes.forEach(n => {
+			if (n === btn) return;
+			const c = n.cloneNode(true);
+			if (c.nodeType === 1) {
+				c.removeAttribute('id');
+				c.querySelectorAll('[id]').forEach(m => m.removeAttribute('id'));
+			}
+			copy.push(c);
+		});
+		pop.replaceChildren.apply(pop, copy);
+		pop.style.maxHeight = '';
+		pop.hidden = false;
+		/* under (i), or above it when the screen (or the phone's bottom bar)
+		   leaves no room; the roomier side scrolls when neither fits */
+		const r = btn.getBoundingClientRect(), w = pop.offsetWidth, ht = pop.offsetHeight;
+		const rail = this.mqMobile && this.mqMobile.matches ? document.querySelector('.vt-rail') : null;
+		const floor = rail ? rail.getBoundingClientRect().top : window.innerHeight;
+		const below = floor - 8 - (r.bottom + 6), above = r.top - 6 - 8;
+		const down = ht <= below || (ht > above && below >= above);
+		const room = down ? below : above;
+		if (ht > room) pop.style.maxHeight = Math.max(0, room).toFixed(0) + 'px';
+		const top = down ? r.bottom + 6 : r.top - 6 - Math.min(ht, room);
+		const left = Math.max(8, Math.min(r.left - 8, window.innerWidth - w - 8));
+		pop.style.top = top.toFixed(0) + 'px';
+		pop.style.left = left.toFixed(0) + 'px';
+		btn.setAttribute('aria-expanded', 'true');
+		this.helpBtn = btn;
+		this.helpPinned = pinned;
+		enter();
+	},
+
+	closeHelp(refocus) {
+		window.clearTimeout(this.helpTimer);
+		const btn = this.helpBtn;
+		if (!btn) return;
+		this.helpBtn = null;
+		this.helpPinned = false;
+		this.helpPop.hidden = true;
+		this.helpPop.textContent = '';
+		btn.setAttribute('aria-expanded', 'false');
+		if (refocus && btn.isConnected) {
+			this.helpRefocus = true;
+			btn.focus();
+			this.helpRefocus = false;
 		}
 	},
 

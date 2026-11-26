@@ -28,6 +28,20 @@ ubus list | grep smartsafehub
 ubus call smartsafehub system_root_password_status '{}'
 ```
 
+## HTTPS 전송 및 리다이렉트 정책
+
+SmartSafeHub의 일반 API 통신(장치 등록, 활동·진단 전송, Apps 카탈로그, 업데이트 확인, 릴리스 노트)은 `curl`을 사용합니다. 기본 전체 제한시간은 20초이며 각 호출부가 더 짧게 지정한 경우 그 값을 유지합니다. `/usr/lib/smartsafehub/http.sh`는 HTTPS 인증서 검증을 유지하고, API에서는 HTTP 리다이렉트(301/302/307/308)를 거부하며 인증 헤더를 외부 호스트로 전달하지 않습니다.
+
+펌웨어 이미지, Apps 패키지(`.apk`) 및 패키지 색인(`packages.adb`) 다운로드는 `uclient-fetch --timeout=30`을 사용합니다. 이 값은 전체 다운로드 시간 제한이 아닌 수신 대기 제한입니다. 파일 다운로드는 시작 URL의 HTTPS를 확인하며, 응답 파일은 기존 크기·SHA256·서명/승인 검증 절차를 거친 후에만 사용합니다. 파일 전송 경로에서는 API 인증 헤더를 전송하지 않습니다. `uclient-fetch`가 서버 리다이렉트를 처리할 수 있으므로 신뢰된 공식 저장소와 HTTPS 응답 정책을 유지해야 합니다.
+
+```sh
+apk info -e curl
+apk info -e uclient-fetch
+curl --version
+```
+
+API 호출에서 서버가 3xx를 반환하면 인증정보 보호를 위해 실패 처리하므로 API 주소는 직접 2xx를 응답해야 합니다. 파일 다운로드에서는 `uclient-fetch`의 리다이렉트 동작을 허용하되 기존 해시·서명 검증을 유지합니다. 최초 설치 전의 서명 키 다운로드는 패키지 설치 전 부트스트랩 절차입니다.
+
 ## 설치 후 확인
 
 ### 패키지와 정적 자산
@@ -176,3 +190,20 @@ rm -f /tmp/luci-indexcache
 ```
 
 브라우저에서는 강력 새로고침을 수행하거나 기존 SmartSafeHub 탭을 닫고 다시 접속합니다. 통합 진입 템플릿의 `app.js?v=...`와 Shadow DOM용 `app.css?v=...`에는 현재 패키지의 `PKG_VERSION-rPKG_RELEASE` 값이 사용되므로 패키지 릴리스 변경 시 브라우저 캐시가 함께 무효화됩니다.
+
+### 공유기 웹사이트 RPC 로딩 지연 확인
+
+사용자 규칙 등 화면이 간헐적으로 느릴 때 공유기 웹사이트에 로그인한 브라우저의
+개발자 도구(F12 → Console)에서 아래 명령어를 실행합니다. 느려지는 상황을 재현한
+후 실행하면 가장 오래 걸린 RPC와 실패 요청을 구분할 수 있습니다.
+
+```js
+window.__SMARTHUB_RPC_DIAGNOSTICS__?.snapshot()
+// 처음부터 다시 측정할 때
+window.__SMARTHUB_RPC_DIAGNOSTICS__?.reset()
+```
+
+- `summary`: 메서드별 호출 수(`calls`), 느린 호출(`slow`), 오류(`errors`), 마지막/최대/평균 처리 시간(ms).
+- `recent`: **1.5초 이상 걸린 요청** 또는 실패한 요청 최근 최대 60건. `responseMs`는 응답 헤더까지 걸린 시간, `decodeMs`는 본문 JSON 처리 시간입니다.
+- 기록은 현재 브라우저 탭의 메모리에만 유지되며 새로고침 시 사라집니다. 서버 업로드나 영구 저장은 하지 않으며, 세션 ID·도메인 규칙·호출 인자·응답 내용·오류 메시지는 기록하지 않습니다.
+- `responseMs`가 긴 경우 네트워크/uhttpd/rpcd 경로를, `decodeMs`가 긴 경우 큰 응답 또는 브라우저 메인 스레드 부하를 우선 확인합니다. 수치만으로 원인을 단정할 수는 없습니다.

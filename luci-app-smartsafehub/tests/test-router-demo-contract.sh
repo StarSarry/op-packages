@@ -13,9 +13,44 @@ done
 grep -Fq "<HomePage" "$DEMO"
 grep -Fq "<SafeShieldPage" "$DEMO"
 grep -Fq "<ConnectedDevicesPage" "$DEMO"
-for page in ActivityPage WanPage LanPage WifiPage SafeShieldRulesPage UpdatePage; do
+for page in ActivityPage WanPage LanPage WifiPage SafeShieldRulesPage UpdatePage SmartSafeHubAccountPage AppsPage SmartHomePage; do
   grep -Fq "<$page" "$DEMO"
 done
+grep -Fq "'rules', 'account', 'apps', 'system'" "$ROOT/frontend/src/app/routes.ts"
+grep -Fq 'onDemoAction={readonlyNotice}' "$DEMO"
+grep -Fq 'demoAccount, demoApps, demoAppsStatus, demoAppsMetrics' "$DEMO"
+grep -Fq 'https://www.smartsafehub.com/router-demo/' "$ROOT/README.md"
+grep -Fq "demo ? (" "$ROOT/frontend/src/pages/SmartSafeHubAccountPage.tsx"
+grep -Fq "if (demo) {" "$ROOT/frontend/src/pages/AppsPage.tsx"
+grep -Fq "if (action === 'remove') closeRemoveDialog();" "$ROOT/frontend/src/pages/AppsPage.tsx"
+grep -Fq "demo ? (" "$ROOT/frontend/src/pages/AppsPage.tsx"
+grep -Fq "demoAccount" "$FIXTURES"
+grep -Fq "updateAvailable: true," "$FIXTURES" || {
+  echo 'demo must show an App update badge' >&2
+  exit 1
+}
+grep -Fq "'network-usage-monitor': 117760" "$FIXTURES" || {
+  echo 'demo must provide an installed size for the network app' >&2
+  exit 1
+}
+grep -Fq 'storage: demoAppsMetrics.storage' "$FIXTURES" || {
+  echo 'dashboard and Apps demo storage must share one fixture' >&2
+  exit 1
+}
+grep -Fq "demoApps" "$FIXTURES"
+# Keep the public demo's Network Watch, first-party label and sample releases visible.
+grep -Fq "case 'netwatch':" "$DEMO"
+grep -Fq '<NetworkWatchPage data={demoNetwatch} devices={demoDevices} activity={demoActivity}' "$DEMO"
+grep -Fq "'safeshield', 'netwatch', 'rules'" "$ROOT/frontend/src/components/ProductNavigation.tsx"
+grep -Fq 'Network Watch' "$ROOT/docs/ROUTER_DEMO.md"
+grep -Fq '실제 네트워크를 관찰하거나 차단하지 않으며' "$ROOT/docs/ROUTER_DEMO.md"
+grep -Fq "version: '1.2.0-r4'" "$FIXTURES"
+grep -Fq "version: '0.2.4-r1'" "$FIXTURES"
+grep -Fq "case 'smarthome':" "$DEMO"
+grep -Fq "operations={demoJarbisOperations}" "$DEMO"
+grep -Fq "getJarbisCredentials: blocked" "$ROOT/frontend/src/demo/jarbis.ts"
+grep -Fq "if (demo || !status?.enabled" "$ROOT/frontend/src/pages/SmartHomePage.tsx"
+grep -Fq "version: '2.4.9-r5'" "$FIXTURES"
 grep -Fq "demo={demo}" "$ROOT/frontend/src/components/AppShell.tsx"
 grep -Fq "!demo ?" "$ROOT/frontend/src/components/ProductNavigation.tsx"
 grep -Fq "base: '/static/router-demo/'" "$CONFIG"
@@ -26,15 +61,8 @@ if grep -Eq 'callApi|callRpc|fetch\(|probeLuciSession|__SMARTHUB_BOOTSTRAP__|/cg
   exit 1
 fi
 
-# Keep the Node.js test runner output out of ShellSpec stdout on success.
-# Preserve its full diagnostics on stderr if any runtime contract fails.
-node_test_log="$(mktemp)"
-trap 'rm -f "$node_test_log"' 0
-if ! node --test "$ROOT/tests/runtime/router-demo.test.mjs" >"$node_test_log" 2>&1; then
-  cat "$node_test_log" >&2
-  exit 1
-fi
-
+# tests/runtime/router-demo.test.mjs runs in the frontend CI job alongside
+# the other behavioral runtime tests; keep ShellSpec's source contracts here.
 # The Hub consumes a committed, separately built bundle. New developers build
 # it locally, then commit the output; this test does not generate build files.
 if grep -q '^frontend/demo-dist/$' "$ROOT/.gitignore"; then

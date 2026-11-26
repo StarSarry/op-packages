@@ -20,7 +20,7 @@
      wps     the device name the station sends in its WPS element
      vendor  manufacturer from the OUI of a globally unique MAC
      private "Private device" for a locally administered MAC
-     mac     "Device" as the last resort
+     mac     "Unknown device" as the last resort
 
    Pure functions; names are untrusted and only ever rendered as text. */
 
@@ -28,6 +28,9 @@ var NAME_MAX = 48;
 /* client sections read from /etc/config/vantage; the rpcd plugin refuses
    to store more */
 var ALIAS_MAX = 512;
+/* quiet sections (#110: a station whose weak signal stays out of the
+   warnings), likewise */
+var QUIET_MAX = 512;
 
 /* C0 (incl. tab, CR, LF), DEL and C1 controls */
 var CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
@@ -39,7 +42,7 @@ var LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(^|[^\ud800-\udbff])[\u
 var SPACES = /[\u0020\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000]+/g;
 
 var SOURCES = {
-	alias: _('Alias'), dns: _('DNS'), mdns: _('mDNS'), dhcp: _('DHCP'), wps: _('WPS'),
+	alias: _('Alias', 'vantage'), dns: _('DNS'), mdns: _('mDNS'), dhcp: _('DHCP'), wps: _('WPS'),
 	vendor: _('Vendor'), 'private': _('Private'), mac: _('MAC')
 };
 
@@ -66,6 +69,7 @@ function str(v) { return typeof v === 'string' ? v : ''; }
 return baseclass.extend({
 	NAME_MAX: NAME_MAX,
 	ALIAS_MAX: ALIAS_MAX,
+	QUIET_MAX: QUIET_MAX,
 	SOURCES: SOURCES,
 	ICONS: ICONS,
 
@@ -185,6 +189,19 @@ return baseclass.extend({
 		return out;
 	},
 
+	/* quiet sections of /etc/config/vantage -> { mac: true }, the stations
+	   whose weak signal the dashboard leaves out of its warnings; past
+	   QUIET_MAX are ignored */
+	quietSet: function(sections) {
+		var out = Object.create(null), self = this, n = 0;
+		(Array.isArray(sections) ? sections : []).forEach(function(s) {
+			if (!s || s['.type'] !== 'quiet' || ++n > QUIET_MAX) return;
+			var mac = self.normMac(s.mac);
+			if (mac) out[mac] = true;
+		});
+		return out;
+	},
+
 	/* umdns hosts reply { 'name.local': { ipv4: '...', ipv6: '...' } }
 	   -> { ip: name }. An address claimed by two different names is left
 	   out: umdns caches unsolicited answers from anyone, so a second claim
@@ -238,7 +255,11 @@ return baseclass.extend({
 	/* Resolve the display name of one station.
 	   s: { mac, alias: { name, icon }, ips: [..], rdns: { ip: name },
 	        mdns: { ip: name }, hint: { name }, wps, vendor }
-	   -> { name, source, sourceLabel, icon, secondary, isPrivate } */
+	   -> { name, plain, source, sourceLabel, icon, secondary, isPrivate }
+	   Without a name (vendor, private, mac) name is the one-line label,
+	   which carries the MAC's last two octets ("Private device 53:0F"),
+	   and plain the same without them, for where the MAC sits beside
+	   it; otherwise both are the name. */
 	resolve: function(s) {
 		s = s || {};
 		var self = this, mac = this.normMac(s.mac) || str(s.mac);
@@ -261,16 +282,18 @@ return baseclass.extend({
 		if (!name && (name = fromIps(s.mdns))) source = 'mdns';
 		if (!name && s.wps && (name = fmt.safeText(str(s.wps).trim(), NAME_MAX) || null)) source = 'wps';
 
-		var tail = fmt.macTail(mac);
+		var plain = name, tail = fmt.macTail(mac);
 		if (!name) {
-			if (priv) { name = _('Private device') + ' · ' + tail; source = 'private'; }
-			else if (s.vendor) { name = _('%s device').format(fmt.safeText(s.vendor, 32)) + ' · ' + tail; source = 'vendor'; }
-			else { name = _('Device') + ' · ' + tail; source = 'mac'; }
+			if (priv) { plain = _('Private device'); source = 'private'; }
+			else if (s.vendor) { plain = _('%s device').format(fmt.safeText(s.vendor, 32)); source = 'vendor'; }
+			else { plain = _('Unknown device', 'vantage'); source = 'mac'; }
+			name = tail ? plain + ' ' + tail : plain;
 		}
 
 		var icon = (s.alias && this.validIcon(s.alias.icon)) || this.guessIcon(source === 'vendor' ? s.vendor : name) || 'device';
 		return {
 			name: name,
+			plain: plain,
 			source: source,
 			sourceLabel: SOURCES[source],
 			icon: icon,

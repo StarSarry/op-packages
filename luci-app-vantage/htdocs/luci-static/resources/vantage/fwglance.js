@@ -245,11 +245,6 @@ function ipBytes(a) {
 	return out.concat(tail);
 }
 
-function ipFamily(a) {
-	var b = ipBytes(a);
-	return b ? (b.length === 4 ? 4 : 6) : 0;
-}
-
 /* the leading one bits of a mask, -1 when they are not contiguous */
 function maskBits(m) {
 	var bits = 0, zero = false;
@@ -278,10 +273,10 @@ function cmpBytes(a, b) {
 /* an address, address/bits, address/mask or range -> { family, all,
    bytes, bits, nc } or { family, all, range: [ lo, hi ] } (all: the
    whole address space, as 0.0.0.0/0 or ::/0; nc: a mask that is not
-   contiguous, which fw4 applies to the address); null when it is
+   a prefix, for which fw4 writes a masked comparison); null when it is
    malformed, undefined when it is no address (a network name) */
 function subnet(s) {
-	var p = s.split('/'), r, a, b, bits;
+	var p = s.split('/'), r, a, b, bits, m;
 	if (p.length === 2) {
 		a = ipBytes(p[0]);
 		if (!a) return null;
@@ -292,8 +287,18 @@ function subnet(s) {
 			return { family: a.length === 4 ? 4 : 6, all: bits === 0, nc: bits < 0,
 				bytes: bits < 0 ? a.map(function(x, i) { return x & b[i]; }) : a, bits: bits };
 		}
-		if (!/^\d+$/.test(p[1])) return null;
-		return { family: a.length === 4 ? 4 : 6, all: +p[1] === 0, bytes: a, bits: +p[1] };
+		/* the length is a number as ucode converts one: a sign, then
+		   digits (decimal, 0x, 0b, 0o); none, or a bare 0b or 0o, is 0.
+		   Not followed: a blank before it, a blank or sign after 0b or 0o */
+		m = /^([-+]?)(0x[0-9a-f]+|0b[01]*|0o[0-7]*|\d*)$/i.exec(p[1]);
+		if (!m) return null;
+		bits = Number(m[2]) || 0;
+		/* a negative length compares the address's last bits instead
+		   (::1234/-64), all of them when none is left to compare */
+		if (m[1] === '-' && bits > 0)
+			return { family: a.length === 4 ? 4 : 6, nc: true, bytes: a, bits: -1,
+				all: bits === a.length * 8 && a.every(function(x) { return x === 0; }) };
+		return { family: a.length === 4 ? 4 : 6, all: bits === 0, bytes: a, bits: bits };
 	}
 	if (p.length > 2) return null;
 	r = s.split('-');
@@ -782,9 +787,10 @@ return baseclass.extend({
 				families: fams
 			};
 		};
+		/* the admin ports (ADMIN_PORTS) it opens to any address, [] for none */
 		var admin = function(item, ports) {
-			return item.from.anywhere && (item.proto[0] === 'all' || item.proto.indexOf('tcp') >= 0) &&
-				ADMIN_PORTS.some(function(p) { return hasPort(ports, p); });
+			if (!item.from.anywhere || !(item.proto[0] === 'all' || item.proto.indexOf('tcp') >= 0)) return [];
+			return ADMIN_PORTS.filter(function(p) { return hasPort(ports, p); });
 		};
 		/* standard housekeeping: ping and other control messages, multicast
 		   membership, DHCP client replies, IPsec passed on to a host */
@@ -848,8 +854,9 @@ return baseclass.extend({
 				return;
 			}
 			open.push(item);
-			if (admin(item, item.ports))
-				warnFor(s, { level: 'warn', code: 'admin-open', kind: 'rule', name: item.name, ports: item.portText });
+			var a = admin(item, item.ports);
+			if (a.length)
+				warnFor(s, { level: 'warn', code: 'admin-open', kind: 'rule', name: item.name, ports: item.portText, admin: a });
 		});
 
 		of('redirect').forEach(function(s) {
@@ -881,16 +888,17 @@ return baseclass.extend({
 			var first = function(f) { return r.dest_ip.addrs.filter(function(a) { return a.family === f; })[0]; };
 			item.local = !r.dest_ip ? true : (!own || !r.dest_ip.addrs) ? null
 				: item.families.some(function(f) { var a = first(f); return !a || isOwn(a); });
+			var a = admin(item, inner);
 			if (item.local === null) {
 				fwd.push(item);
-				if (admin(item, inner))
-					warnFor(s, { level: 'warn', code: 'admin-unsure', kind: 'redirect', name: item.name, host: item.host, ports: item.portText });
+				if (a.length)
+					warnFor(s, { level: 'warn', code: 'admin-unsure', kind: 'redirect', name: item.name, host: item.host, ports: item.portText, admin: a });
 				return;
 			}
 			if (!item.local) { fwd.push(item); return; }
 			open.push(item);
-			if (admin(item, inner))
-				warnFor(s, { level: 'warn', code: 'admin-open', kind: 'redirect', name: item.name, ports: item.portText });
+			if (a.length)
+				warnFor(s, { level: 'warn', code: 'admin-open', kind: 'redirect', name: item.name, ports: item.portText, admin: a });
 		});
 
 		/* custom rules: files the firewall config names, whose rules this

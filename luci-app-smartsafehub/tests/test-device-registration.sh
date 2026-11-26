@@ -49,8 +49,19 @@ grep -Fq 'refresh_device_pairing' "$RPC"
 # Pairing can bootstrap an unregistered local credential itself, so the
 # dedicated account page must not deadlock the flow by requiring a registered
 # phase before a code can be requested.
-grep -Fq 'disabled={pairingBusy}' "$ACCOUNT_PAGE" || {
-	echo 'pairing button must stay available while device bootstrap is pending' >&2
+# Disable the button only while an issuance is already in flight, including
+# the new background worker's starting/running phases. A pending bootstrap
+# alone must never prevent the first pairing request.
+grep -Fq 'disabled={issuingCode}' "$ACCOUNT_PAGE" || {
+	echo 'pairing button must be gated by an active code issuance only' >&2
+	exit 1
+}
+grep -Fq 'const issuingCode = pairingBusy || status?.pairingOperation?.phase' "$ACCOUNT_PAGE" || {
+	echo 'pairing button must honor local and background issuance state' >&2
+	exit 1
+}
+grep -Fq "status?.pairingOperation?.phase === 'running'" "$ACCOUNT_PAGE" || {
+	echo 'pairing button must prevent duplicate requests while the worker runs' >&2
 	exit 1
 }
 if grep -Fq "pairingBusy || data?.phase !== 'registered'" "$ACCOUNT_PAGE"; then
@@ -99,7 +110,7 @@ grep -Fq 'const pairingCode = !connected && !expired ? status?.pairingCode : nul
 ! grep -Fq 'safeshield_license_update' "$MAIN" || fail 'legacy SafeShield license update RPC must stay removed'
 ! grep -Fq '"license_get"' "$ROOT/root/usr/share/rpcd/acl.d/luci-app-smartsafehub.json" || fail 'legacy SafeShield license_get ACL must stay removed'
 ! grep -Fq '"license_update"' "$ROOT/root/usr/share/rpcd/acl.d/luci-app-smartsafehub.json" || fail 'legacy SafeShield license_update ACL must stay removed'
-echo 'device registration contract: ok'
+echo 'PASS: device registration source contract'
 
 grep -Fq '/etc/smartsafehub/device-credential.json' "$HELPER"
 grep -Fq 'devices/bootstrap' "$HELPER"
@@ -292,10 +303,10 @@ url=''
 body=''
 while [ "$#" -gt 0 ]; do
 	case "$1" in
-		-o) out="$2"; shift 2 ;;
+		-o|--output) out="$2"; shift 2 ;;
 		--data-binary) body="${2#@}"; shift 2 ;;
-		-H|--connect-timeout|--max-time) shift 2 ;;
-		-f|-s|-S|-fsS) shift ;;
+		-H|--header|--connect-timeout|--max-time|--max-redirs|--proto|--proto-redir|--noproxy|--write-out) shift 2 ;;
+		-f|-s|-S|-fsS|--disable|--fail|--silent|--show-error|--location|--) shift ;;
 		http://*|https://*) url="$1"; shift ;;
 		*) shift ;;
 	esac
@@ -318,6 +329,7 @@ JSON
 		;;
 	*) exit 1 ;;
 esac
+printf '200'
 EOF
 chmod +x "$FAKE_CURL"
 
@@ -326,7 +338,6 @@ SMARTSAFEHUB_DEVICE_STATE_FILE="$FLOW_RUNTIME/device.json" \
 SMARTSAFEHUB_DEVICE_CREDENTIAL_FILE="$FLOW_CREDENTIAL" \
 SMARTSAFEHUB_DEVICE_JSONFILTER_BIN="$FAKE_JSONFILTER" \
 SMARTSAFEHUB_DEVICE_UBUS_BIN="$FAKE_UBUS" \
-SMARTSAFEHUB_DEVICE_UCLIENT_FETCH_BIN="$FAKE_FETCH" \
 SMARTSAFEHUB_TEST_URL_LOG="$FLOW_URL_LOG" \
 SMARTSAFEHUB_TEST_UBUS_LOG="$FLOW_UBUS_LOG" \
 SMARTSAFEHUB_TEST_BOOTSTRAP_BODY="$FLOW_BOOTSTRAP_BODY" \
@@ -371,7 +382,6 @@ SMARTSAFEHUB_DEVICE_STATE_FILE="$FLOW_RUNTIME/device.json" \
 SMARTSAFEHUB_DEVICE_CREDENTIAL_FILE="$FLOW_CREDENTIAL" \
 SMARTSAFEHUB_DEVICE_JSONFILTER_BIN="$FAKE_JSONFILTER" \
 SMARTSAFEHUB_DEVICE_UBUS_BIN="$FAKE_UBUS" \
-SMARTSAFEHUB_DEVICE_UCLIENT_FETCH_BIN="$FAKE_FETCH" \
 SMARTSAFEHUB_TEST_URL_LOG="$FLOW_URL_LOG" \
 SMARTSAFEHUB_TEST_UBUS_LOG="$FLOW_UBUS_LOG" \
 PATH="$FLOW_DIR:$PATH" \
@@ -394,7 +404,6 @@ SMARTSAFEHUB_DEVICE_STATE_FILE="$FLOW_RUNTIME/device.json" \
 SMARTSAFEHUB_DEVICE_CREDENTIAL_FILE="$FLOW_CREDENTIAL" \
 SMARTSAFEHUB_DEVICE_JSONFILTER_BIN="$FAKE_JSONFILTER" \
 SMARTSAFEHUB_DEVICE_UBUS_BIN="$FAKE_UBUS" \
-SMARTSAFEHUB_DEVICE_UCLIENT_FETCH_BIN="$FAKE_FETCH" \
 SMARTSAFEHUB_TEST_URL_LOG="$FLOW_URL_LOG" \
 SMARTSAFEHUB_TEST_UBUS_LOG="$FLOW_UBUS_LOG" \
 SMARTSAFEHUB_TEST_ACCOUNT_CONNECTED=1 \
@@ -423,7 +432,6 @@ SMARTSAFEHUB_DEVICE_STATE_FILE="$FLOW_RUNTIME/device.json" \
 SMARTSAFEHUB_DEVICE_CREDENTIAL_FILE="$FLOW_CREDENTIAL" \
 SMARTSAFEHUB_DEVICE_JSONFILTER_BIN="$FAKE_JSONFILTER" \
 SMARTSAFEHUB_DEVICE_UBUS_BIN="$FAKE_UBUS" \
-SMARTSAFEHUB_DEVICE_UCLIENT_FETCH_BIN="$FAKE_FETCH" \
 SMARTSAFEHUB_TEST_URL_LOG="$FLOW_URL_LOG" \
 SMARTSAFEHUB_TEST_UBUS_LOG="$FLOW_UBUS_LOG" \
 SMARTSAFEHUB_TEST_ACCOUNT_CONNECTED=1 \
@@ -532,7 +540,6 @@ SMARTSAFEHUB_DEVICE_CREDENTIAL_FILE="$FLOW_CREDENTIAL" \
 SMARTSAFEHUB_ACTIVITY_CREDENTIAL_FILE="$FLOW_ACTIVITY_CREDENTIAL" \
 SMARTSAFEHUB_DEVICE_JSONFILTER_BIN="$FAKE_JSONFILTER" \
 SMARTSAFEHUB_DEVICE_UBUS_BIN="$FAKE_UBUS" \
-SMARTSAFEHUB_DEVICE_UCLIENT_FETCH_BIN="$FAKE_FETCH" \
 SMARTSAFEHUB_TEST_URL_LOG="$FLOW_URL_LOG" \
 SMARTSAFEHUB_TEST_UBUS_LOG="$FLOW_UBUS_LOG" \
 SMARTSAFEHUB_TEST_ACCOUNT_CONNECTED=0 \
@@ -562,7 +569,6 @@ SMARTSAFEHUB_DEVICE_CREDENTIAL_FILE="$FLOW_CREDENTIAL" \
 SMARTSAFEHUB_ACTIVITY_CREDENTIAL_FILE="$FLOW_ACTIVITY_CREDENTIAL" \
 SMARTSAFEHUB_DEVICE_JSONFILTER_BIN="$FAKE_JSONFILTER" \
 SMARTSAFEHUB_DEVICE_UBUS_BIN="$FAKE_UBUS" \
-SMARTSAFEHUB_DEVICE_UCLIENT_FETCH_BIN="$FAKE_FETCH" \
 SMARTSAFEHUB_TEST_URL_LOG="$FLOW_URL_LOG" \
 SMARTSAFEHUB_TEST_UBUS_LOG="$FLOW_UBUS_LOG" \
 SMARTSAFEHUB_TEST_ACCOUNT_CONNECTED=0 \
@@ -588,7 +594,6 @@ SMARTSAFEHUB_DEVICE_STATE_FILE="$RETRY_RUNTIME/device.json" \
 SMARTSAFEHUB_DEVICE_CREDENTIAL_FILE="$FLOW_CREDENTIAL" \
 SMARTSAFEHUB_DEVICE_JSONFILTER_BIN="$FAKE_JSONFILTER" \
 SMARTSAFEHUB_DEVICE_UBUS_BIN="$FAKE_UBUS" \
-SMARTSAFEHUB_DEVICE_UCLIENT_FETCH_BIN="$FAKE_FETCH" \
 SMARTSAFEHUB_TEST_URL_LOG="$FLOW_URL_LOG" \
 SMARTSAFEHUB_TEST_UBUS_LOG="$RETRY_UBUS_LOG" \
 SMARTSAFEHUB_TEST_ACCOUNT_CONNECTED=1 \
@@ -606,7 +611,6 @@ SMARTSAFEHUB_DEVICE_STATE_FILE="$RETRY_RUNTIME/device.json" \
 SMARTSAFEHUB_DEVICE_CREDENTIAL_FILE="$FLOW_CREDENTIAL" \
 SMARTSAFEHUB_DEVICE_JSONFILTER_BIN="$FAKE_JSONFILTER" \
 SMARTSAFEHUB_DEVICE_UBUS_BIN="$FAKE_UBUS" \
-SMARTSAFEHUB_DEVICE_UCLIENT_FETCH_BIN="$FAKE_FETCH" \
 SMARTSAFEHUB_TEST_URL_LOG="$FLOW_URL_LOG" \
 SMARTSAFEHUB_TEST_UBUS_LOG="$RETRY_UBUS_LOG" \
 SMARTSAFEHUB_TEST_ACCOUNT_CONNECTED=1 \
@@ -698,3 +702,4 @@ grep -Fq '"plan":"free"' "$PLAN_RETRY_RUNTIME/device.json" || {
   echo 'invalid entitlement must not request SafeShield refresh' >&2
   exit 1
 }
+printf 'PASS: device registration, entitlements and refresh retries\n'

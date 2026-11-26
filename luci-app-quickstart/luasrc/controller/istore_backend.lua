@@ -10,7 +10,7 @@ local util = require "luci.util"
 module("luci.controller.istore_backend", package.seeall)
 
 local BLOCKSIZE = 2048
-local ISTOREOS_PORT = 3038
+local ISTOREOS_SOCKET = "/var/run/quickstart/http.sock"
 
 function index()
     entry({"istore"}, call("istore_backend")).leaf=true
@@ -22,7 +22,7 @@ local function sink_socket(sock, io_err)
       if not chunk then 
         return 1 
       else 
-        return sock:send(chunk)
+        return sock:sendall(chunk)
       end 
     end 
   else 
@@ -50,7 +50,7 @@ local function get_session()
   for _, key in ipairs({"sysauth_https", "sysauth_http", "sysauth"}) do
     sid = http.getcookie(key)
     if sid then
-      sid, sdat = session_retrieve(sid, nil)
+      sid, sdat = session_retrieve(sid, {"root"})
       if sid and sdat then
         return sid, sdat
       end
@@ -64,13 +64,16 @@ local function chunksource(sock, buffer)
 	return function()
 		local output
 		local _, endp, count = buffer:find("^([0-9a-fA-F]+);?.-\r\n")
-		while not count and #buffer <= 1024 do
+		while not count and #buffer < 1024 do
 			local newblock, code = sock:recv(1024 - #buffer)
-			if not newblock then
+			if not newblock or newblock == "" then
 				return nil, code
 			end
 			buffer = buffer .. newblock  
 			_, endp, count = buffer:find("^([0-9a-fA-F]+);?.-\r\n")
+		end
+		if not count then
+			return nil, -1, "invalid encoding"
 		end
 		count = tonumber(count, 16)
 		if not count then
@@ -83,6 +86,7 @@ local function chunksource(sock, buffer)
 			return output
 		else
 			output = buffer:sub(endp+1, endp+count)
+			local buffered_tail = #buffer - endp - #output
 			buffer = ""
 			if count - #output > 0 then
 				local remain, code = sock:recvall(count-#output)
@@ -92,7 +96,7 @@ local function chunksource(sock, buffer)
 				output = output .. remain
 				count, code = sock:recvall(2)
 			else
-				count, code = sock:recvall(count+2-#buffer+endp)
+				count, code = sock:recvall(2-buffered_tail)
 			end
 			if not count then
 				return nil, code
@@ -103,10 +107,17 @@ local function chunksource(sock, buffer)
 end
 
 function istore_backend() 
-  local sock = nixio.connect("127.0.0.1", ISTOREOS_PORT) 
+  local sock = nixio.socket("unix", "stream")
+  if sock and not sock:connect(ISTOREOS_SOCKET) then
+    sock:close()
+	sock = nil
+  end
   if not sock then
-    http.status(500, "connect failed")
-    return
+	sock = nixio.connect("127.0.0.1", 3038)
+  end
+  if not sock then
+	http.status(500, "connect failed")
+	return
   end
   local input = {}
   input[#input+1] = http.getenv("REQUEST_METHOD") .. " " .. http.getenv("REQUEST_URI") .. " HTTP/1.1"

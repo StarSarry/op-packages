@@ -2,6 +2,10 @@
 'use strict';
 
 import { failure } from './smartsafehub/core.uc';
+import { read_featured_sensor, update_featured_sensor } from './smartsafehub/smarthome.uc';
+import { read_netwatch_status, update_netwatch_enabled } from './smartsafehub/netwatch.uc';
+import { read_apps_catalog } from './smartsafehub/apps.uc';
+import { read_apps_status, read_apps_metrics, install_app, repair_app, update_app, remove_app } from './smartsafehub/apps-manager.uc';
 import { read_connected_devices } from './smartsafehub/devices.uc';
 import {
 	discard_uploaded_backup,
@@ -116,6 +120,17 @@ const methods = {
 			return read_status(request);
 		}),
 	},
+	smarthome_featured_sensor: {
+		call: require_root_password(function(request) {
+			return read_featured_sensor(request);
+		}),
+	},
+	smarthome_featured_sensor_set: {
+		args: { sensor_id: '' },
+		call: require_root_password(function(request) {
+			return update_featured_sensor(request);
+		}),
+	},
 	connected_devices: {
 		call: require_root_password(function(request) {
 			return read_connected_devices();
@@ -171,6 +186,48 @@ const methods = {
 		},
 		call: require_root_password(function(request) {
 			return update_update_settings(request);
+		}),
+	},
+	apps_catalog: {
+		args: { refresh: false },
+		call: require_root_password(function(request) {
+			return read_apps_catalog(request);
+		}),
+	},
+	apps_status: {
+		args: { refresh: false },
+		call: require_root_password(function(request) {
+			return read_apps_status(request);
+		}),
+	},
+	apps_metrics: {
+		args: { refresh: false },
+		call: require_root_password(function(request) {
+			return read_apps_metrics(request);
+		}),
+	},
+	apps_install: {
+		args: { app_id: '' },
+		call: require_root_password(function(request) {
+			return install_app(request);
+		}),
+	},
+	apps_repair: {
+		args: { app_id: '' },
+		call: require_root_password(function(request) {
+			return repair_app(request);
+		}),
+	},
+	apps_update: {
+		args: { app_id: '' },
+		call: require_root_password(function(request) {
+			return update_app(request);
+		}),
+	},
+	apps_remove: {
+		args: { app_id: '' },
+		call: require_root_password(function(request) {
+			return remove_app(request);
 		}),
 	},
 	firmware_status: {
@@ -353,6 +410,17 @@ const methods = {
 		}),
 	},
 
+	netwatch_status: {
+		call: require_root_password(function(request) {
+			return read_netwatch_status(request);
+		}),
+	},
+	netwatch_enabled_update: {
+		args: { enabled: true },
+		call: require_root_password(function(request) {
+			return update_netwatch_enabled(request);
+		}),
+	},
 	activity_history: {
 		call: require_root_password(function(request) {
 			return read_activity_history();

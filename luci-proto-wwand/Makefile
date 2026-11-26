@@ -20,12 +20,12 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-proto-wwand
-PKG_VERSION:=1.7.0_pre1
-PKG_RELEASE:=18
+PKG_VERSION:=1.9.0_pre4
+PKG_RELEASE:=21
 
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL:=https://github.com/ddimension/luci-proto-wwand.git
-PKG_SOURCE_VERSION:=fb547fef6576e16ca0e83bd8379f82c27a040613
+PKG_SOURCE_VERSION:=4c94276476fd7d6abfb106f9447f440a3e8feadd
 PKG_MIRROR_HASH:=skip
 
 PKG_LICENSE:=GPL-2.0-only

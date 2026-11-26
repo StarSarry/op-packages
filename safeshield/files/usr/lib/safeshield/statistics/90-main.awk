@@ -9,6 +9,7 @@ function record_event(query_delta, blocked_delta, client_ip,    now, bucket) {
 	now = current_time()
 	bucket = hour_start(now)
 	snapshot_dirty = 1
+	aggregate_dirty = 1
 	queries[bucket] += 0
 	blocked[bucket] += 0
 
@@ -56,7 +57,7 @@ function replace_source_clients(    address) {
 	}
 }
 
-function apply_source_snapshot(    now, bucket, had_source, same_epoch, query_delta, blocked_delta, internal_queries, internal_blocked, address, client_queries_delta, client_blocked_delta) {
+function apply_source_snapshot(    now, bucket, had_source, same_epoch, query_delta, blocked_delta, internal_queries, internal_blocked, address, client_queries_delta, client_blocked_delta, attributed_queries, attributed_blocked, invalid_attribution) {
 	if (!poll_active || poll_instance_id == "") {
 		return
 	}
@@ -77,6 +78,12 @@ function apply_source_snapshot(    now, bucket, had_source, same_epoch, query_de
 
 	internal_queries = 0
 	internal_blocked = 0
+	attributed_queries = 0
+	attributed_blocked = 0
+	invalid_attribution = 0
+	# Calculate every delta before recording any client. dnsmasq client counters
+	# can reappear with an old baseline even as global counters advance only
+	# slightly. Such an inconsistent poll must not poison the current hour.
 	for (address in poll_client_seen) {
 		if (!had_source) {
 			client_queries_delta = 0
@@ -88,15 +95,18 @@ function apply_source_snapshot(    now, bucket, had_source, same_epoch, query_de
 			client_blocked_delta = source_counter_delta(poll_client_blocked[address], \
 				source_client_blocked[address], same_epoch)
 		}
-
+		poll_client_query_delta[address] = client_queries_delta
+		poll_client_block_delta[address] = client_blocked_delta
 		if (is_internal_statistics_client(address)) {
 			internal_queries += client_queries_delta
 			internal_blocked += client_blocked_delta
-			continue
 		}
-
-		if (client_queries_delta > 0 || client_blocked_delta > 0) {
-			record_device(address, client_queries_delta, client_blocked_delta, now)
+		else {
+			attributed_queries += client_queries_delta
+			attributed_blocked += client_blocked_delta
+			if (client_blocked_delta > client_queries_delta) {
+				invalid_attribution = 1
+			}
 		}
 	}
 
@@ -108,8 +118,33 @@ function apply_source_snapshot(    now, bucket, had_source, same_epoch, query_de
 	if (blocked_delta < 0) {
 		blocked_delta = 0
 	}
+	if (blocked_delta > query_delta) {
+		# Do not manufacture blocked queries from inconsistent source deltas.
+		blocked_delta = query_delta
+		invalid_attribution = 1
+	}
+	if (attributed_queries > query_delta || attributed_blocked > blocked_delta) {
+		invalid_attribution = 1
+	}
+	if (!invalid_attribution) {
+		for (address in poll_client_seen) {
+			if (is_internal_statistics_client(address)) {
+				continue
+			}
+			client_queries_delta = poll_client_query_delta[address]
+			client_blocked_delta = poll_client_block_delta[address]
+			if (client_queries_delta > 0 || client_blocked_delta > 0) {
+				record_device(address, client_queries_delta, client_blocked_delta, now)
+			}
+		}
+	}
+	for (address in poll_client_seen) {
+		delete poll_client_query_delta[address]
+		delete poll_client_block_delta[address]
+	}
 
 	if (query_delta > 0 || blocked_delta > 0) {
+		aggregate_dirty = 1
 		queries[bucket] += 0
 		blocked[bucket] += 0
 		queries[bucket] += query_delta
@@ -184,6 +219,9 @@ BEGIN {
 	}
 	event_index = 0
 	snapshot_dirty = 0
+	# BEGIN restores state and reconciles device identities before the first
+	# snapshot, so never trust persisted aggregates as an in-memory cache.
+	aggregate_dirty = 1
 	device_count = 0
 	devices_truncated = 0
 	last_lease_refresh = 0

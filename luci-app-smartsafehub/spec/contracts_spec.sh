@@ -8,6 +8,13 @@ Describe 'SmartSafeHub 셸 계약 테스트'
     The error should be blank
   End
 
+  It '신규 셸 파일의 문법 검사 자동 검색을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-shell-syntax-discovery.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
   It '공유기 각 메뉴의 카드 밖 섹션 제목과 기능 버튼 보존을 검증한다'
     When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-section-layout.sh"
     The status should be success
@@ -22,8 +29,36 @@ Describe 'SmartSafeHub 셸 계약 테스트'
     The error should be blank
   End
 
+  It 'curl HTTPS 요청이 리다이렉트를 따르거나 인증 정보를 다른 주소로 보내지 않는지 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-http-transport.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It '펌웨어와 Apps 파일은 uclient-fetch 30초로 다운로드하고 실패 시 임시 파일을 제거한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-download-transport.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It 'OpenWrt 25.12 BusyBox 기본 명령과 의존성 호환성을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-openwrt-commands.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
   It '셸 파이프라인의 Broken pipe 회귀를 방지한다'
     When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-shell-pipeline-safety.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It '스마트홈 지연 로딩과 재방문 캐시 및 전구 제어 우선순위를 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-smarthome-performance.sh"
     The status should be success
     The output should start with 'PASS:'
     The error should be blank
@@ -63,8 +98,29 @@ Describe 'SmartSafeHub 셸 계약 테스트'
     The error should be blank
   End
 
+  It 'Network Watch의 경량 연결 관찰과 중복 경고 제한을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-netwatch.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It 'Network Watch 토글·기기명·최근 감지 이벤트 화면을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-netwatch-ui.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
   It '공유기 최근 활동 RPC와 UI 계약을 검증한다'
     When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-activity-ui-contract.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It '사용자 규칙 렌더링 최적화와 RPC 진단 개인정보 보호 계약을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-rules-performance.sh"
     The status should be success
     The output should start with 'PASS:'
     The error should be blank
@@ -77,6 +133,13 @@ Describe 'SmartSafeHub 셸 계약 테스트'
     The error should be blank
   End
 
+  It '기기 버전과 추천 규칙 확인을 함께 전송하는 동기화 요청을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-device-sync-version.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
   It '추천 사용자 규칙의 빠른 적용 확인 보고와 재전송 방지를 검증한다'
     When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-recommended-ack.sh"
     The status should be success
@@ -86,6 +149,20 @@ Describe 'SmartSafeHub 셸 계약 테스트'
 
   It '계정 기반 Cloud 활동 동기화와 직접/관찰 이벤트 분리를 검증한다'
     When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-activity-cloud-sync.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It '공통 ucode의 숫자와 JSON 검증을 확인한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-ucode-common.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It '공통 잠금의 경합과 소유권 보호를 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-lock-common.sh"
     The status should be success
     The output should start with 'PASS:'
     The error should be blank
@@ -112,6 +189,27 @@ Describe 'SmartSafeHub 셸 계약 테스트'
     The error should be blank
   End
 
+  It 'Apps 설치 성공 이벤트 전송과 재시도·복원 제외 계약을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-apps-metrics.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It 'Jarbis 공식 앱 연결과 설치 보안 계약을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-jarbis-apps.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It '펌웨어 업데이트 후 검증된 Apps 자동 복원 계약을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-apps-restore.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
   It '내비게이션 계약을 검증한다'
     When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-navigation-contract.sh"
     The status should be success
@@ -128,6 +226,13 @@ Describe 'SmartSafeHub 셸 계약 테스트'
 
   It '문서 UI 계약을 검증한다'
     When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-document-ui-contract.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It 'CHANGELOG 릴리즈 사이 빈 줄 두 개를 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-changelog-spacing.sh"
     The status should be success
     The output should start with 'PASS:'
     The error should be blank
@@ -273,6 +378,62 @@ Describe 'SmartSafeHub 셸 계약 테스트'
     The error should be blank
   End
 
+  It 'RPC 외부 작업 분리와 캐시/작업 중복 방지를 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-rpc-jobs.sh"
+    The status should be success
+    The output should start with 'PASS: detached RPC worker'
+    The error should be blank
+  End
+
+  It 'SmartSafeHub Apps 설치와 제거 안전성 계약을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-apps-manager.sh"
+    The status should be success
+    The output should start with 'PASS: Apps install/remove'
+    The error should be blank
+  End
+
+  It 'Apps 설치/제거 색상과 제거 확인 팝업 및 진행 상태를 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-apps-ui.sh"
+    The status should be success
+    The output should start with 'PASS: Apps removal confirmation'
+    The error should be blank
+  End
+
+  It 'Apps 저장 공간의 procd 및 statvfs 계산 계약을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-apps-storage.sh"
+    The status should be success
+    The output should start with 'PASS: Apps storage'
+    The error should be blank
+  End
+
+  It 'SmartSafeHub Apps 공식 UI 새 탭 실행과 알림 닫기 계약을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-apps-launch.sh"
+    The status should be success
+    The output should start with 'PASS: Apps secure new-tab launch'
+    The error should be blank
+  End
+
+  It 'SmartSafeHub Apps 메뉴와 승인된 앱 카탈로그를 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-apps-contract.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It 'Apps 공식 제공 유형과 구버전 API 및 체험 화면 호환성을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-apps-publisher.sh"
+    The status should be success
+    The output should start with 'PASS: Apps publisher type'
+    The error should be blank
+  End
+
+  It 'Travelmate 앱의 표시와 고정 패키지 및 관리 화면 계약을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-travelmate.sh"
+    The status should be success
+    The output should start with 'PASS: Travelmate Apps demo and catalog contract'
+    The error should be blank
+  End
+
   It '모든 rpcd ucode 진입점과 모듈의 실제 컴파일을 검증한다'
     When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-ucode-syntax.sh"
     The status should be success
@@ -335,4 +496,111 @@ Describe 'SmartSafeHub 셸 계약 테스트'
     The output should start with 'PASS:'
     The error should be blank
   End
+
+  # 지속적으로 보호해야 하는 기능 계약(과거 CI에서 누락된 테스트 포함)
+  It '최근 활동 동기화 데몬의 유휴 폴링 제한을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-activity-idle-polling.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It '최근 활동의 Cloud 설정과 기록 표시 및 접근성을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-activity-layout.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It '관리자 비밀번호 변경 권한과 입력 검증을 확인한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-admin-password-change.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It '물리 버튼 비밀번호 복구의 안전성 및 초기화를 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-admin-password-recovery.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It '데몬 실행 및 상태 관리의 런타임 계약을 확인한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-daemon-runtime.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It '대시보드의 데이터 중복 호출과 병렬 RPC를 방지한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-dashboard-performance-contract.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It '기기 등록 코드와 자격증명 처리의 안전성을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-device-registration.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It '펌웨어 내장 소프트웨어 버전 비교를 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-firmware-bundling.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It '펌웨어 식별 정보와 업데이트 연결을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-firmware-identity.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It 'WAN/LAN 통합 메뉴 및 과거 링크 호환성을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-network-settings.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It '설정 탭 이동 및 입력값 유지와 키보드 접근을 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-page-tabs.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It '임시 상태 파일과 런타임 경로를 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-runtime-path-contract.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It '테스트 파일이 CI 실행 목록에서 누락되지 않는지 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-suite-integrity.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It '기본 UCI 설정값과 초기화를 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-system-defaults.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
+  It 'Wi-Fi QR 인증과 비밀번호 보호를 검증한다'
+    When run command sh "$SHELLSPEC_PROJECT_ROOT/tests/test-wifi-qr-contract.sh"
+    The status should be success
+    The output should start with 'PASS:'
+    The error should be blank
+  End
+
 End

@@ -30,6 +30,14 @@ msgstr "لون بصيغة HEX (الافتراضي: #5e72e4)."
 msgid "Action"
 msgstr "الإجراء"
 
+#: htdocs/luci-static/resources/view/argon-config.js:170
+msgid "Admin page glass effect"
+msgstr "تأثير الزجاج لصفحة الإدارة"
+
+#: htdocs/luci-static/resources/view/argon-config.js:166
+msgid "Admin page wallpaper"
+msgstr "خلفية صفحة الإدارة"
+
 #: htdocs/luci-static/resources/argon/branding.js:62
 msgid "Another update is running. Please try again."
 msgstr "يوجد تحديث آخر قيد التنفيذ. يرجى المحاولة لاحقًا."
@@ -163,8 +171,8 @@ msgid "Grant UCI access for luci-theme-argon"
 msgstr "السماح للسمة luci-theme-argon بالوصول إلى UCI"
 
 #: htdocs/luci-static/resources/view/argon-config.js:114
-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
-msgstr "يمكنك هنا ضبط التمويه والشفافية لصفحة تسجيل الدخول في سمة Argon، وإدارة صور الخلفية ومقاطع الفيديو. يُنصح باستخدام Chrome."
+msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+msgstr "يمكنك هنا ضبط التمويه والشفافية لصفحة تسجيل الدخول في سمة Argon، وإدارة صور الخلفية ومقاطع الفيديو."
 
 #: htdocs/luci-static/resources/argon/branding.js:60
 msgid "Invalid PNG image or dimensions."
@@ -299,6 +307,10 @@ msgstr "إظهار أو إخفاء التنقل"
 #: htdocs/luci-static/resources/argon-overview.js:33
 msgid "Transmitted bytes"
 msgstr "البايتات المرسلة"
+
+#: htdocs/luci-static/resources/view/argon-config.js:171
+msgid "Turning this off also hides the admin wallpaper and restores the default admin appearance."
+msgstr "إيقاف هذا يخفي أيضًا خلفية صفحة الإدارة ويعيد المظهر الافتراضي لصفحة الإدارة."
 
 #: htdocs/luci-static/resources/argon/branding.js:110
 msgid "Unable to load custom branding. Reload this page or reinstall the theme."
@@ -536,3 +548,23 @@ msgstr "إلغاء"
 #: htdocs/luci-static/resources/argon/updates.js
 msgid "Try again after %s."
 msgstr "حاول مجددًا بعد %s."
+
+#: ucode/template/themes/argon/login_background.ut
+msgid "Play background video"
+msgstr "تشغيل فيديو الخلفية"
+
+#: ucode/template/themes/argon/login_background.ut
+msgid "Pause background video"
+msgstr "إيقاف فيديو الخلفية مؤقتًا"
+
+#: ucode/template/themes/argon/header.ut
+msgid "Skip to content"
+msgstr "تخطي إلى المحتوى"
+
+#: ucode/template/themes/argon/header.ut:46
+msgid "Close"
+msgstr "إغلق"
+
+#: ucode/template/themes/argon/header.ut:43
+msgid "Navigation"
+msgstr "التنقل"

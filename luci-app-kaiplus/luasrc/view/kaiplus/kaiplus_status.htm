@@ -16,24 +16,23 @@
 </style>
 
 <script type="text/javascript">//<![CDATA[
-XHR.poll(5, '<%=url("admin/services/kaiplus_status")%>', null, function(x, st) {
+XHR.poll(2, '<%=url("admin/services/kaiplus_status")%>', null, function(x, st) {
 	var el = document.getElementById('kaiplus_status');
 	var openButton = document.getElementById('kaiplus-open');
 	if (st && el) {
-		var status = st.running
+		var status = st.ready
 			? '<br/><em style=\"color:green\"><%:The KaiPlus service is running.%></em>'
-			: '<br/><em style=\"color:red\"><%:The KaiPlus service is not running.%></em>';
-		if (st.proxy_prefix_enabled && st.app_entry_running) {
-			status = status + '<br/><em><%:Access mode: LinkEase Desktop proxy.%></em>';
-		}
-		else if (st.external_port_enabled) {
-			status = status + '<br/><em><%:Access mode: external port.%></em>';
+			: st.running
+				? '<br/><em style=\"color:#d97706\"><%:The KaiPlus service is starting.%></em>'
+				: '<br/><em style=\"color:red\"><%:The KaiPlus service is not running.%></em>';
+		if (st.access && st.access.available) {
+			status = status + '<br/><em><%:Application entry is available.%></em>';
 		}
 		else {
-			status = status + '<br/><em><%:External port access is disabled.%></em>';
+			status = status + '<br/><em><%:Application entry is unavailable. Check the shared application entry service.%></em>';
 		}
 		el.innerHTML = status;
-		if (openButton) openButton.style.display = st.running ? '' : 'none';
+		if (openButton) openButton.style.display = st.ready && st.access && st.access.available ? '' : 'none';
 	}
 });
 //]]></script>
@@ -44,7 +43,6 @@ XHR.poll(5, '<%=url("admin/services/kaiplus_status")%>', null, function(x, st) {
 		<em><%:Collecting data...%></em>
 	</p>
 	<div class="kaiplus-actions">
-		<input id="kaiplus-open" class="btn cbi-button cbi-button-apply" type="button" value=" <%:Click to open KaiPlus%> " onclick="window.open('<%=url("admin/services/kaiplus/open")%>')" style="display:none"/>
-		<input id="kaiplus-open-kai" class="btn cbi-button" type="button" value=" <%:CLASSIC KAI%> " onclick="window.location.href='<%=url("admin/services/kaiplus/classic")%>'"/>
+		<input id="kaiplus-open" class="btn cbi-button cbi-button-apply" type="button" value=" <%:Click to open KaiPlus%> " onclick="window.open('<%=url("admin/services/linkease_apps/open")%>?id=kaiplus')" style="display:none"/>
 	</div>
 </fieldset>

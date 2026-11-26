@@ -32,6 +32,14 @@ msgstr "Un color HEX (predeterminado: #5e72e4)."
 msgid "Action"
 msgstr "Acción"
 
+#: htdocs/luci-static/resources/view/argon-config.js:170
+msgid "Admin page glass effect"
+msgstr "Efecto de cristal de las páginas de administración"
+
+#: htdocs/luci-static/resources/view/argon-config.js:166
+msgid "Admin page wallpaper"
+msgstr "Fondo de pantalla de las páginas de administración"
+
 #: htdocs/luci-static/resources/argon/branding.js:62
 msgid "Another update is running. Please try again."
 msgstr "Hay otra actualización en curso. Inténtelo de nuevo más tarde."
@@ -165,8 +173,8 @@ msgid "Grant UCI access for luci-theme-argon"
 msgstr "Permitir el acceso a UCI a luci-theme-argon"
 
 #: htdocs/luci-static/resources/view/argon-config.js:114
-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
-msgstr "Aquí puede configurar el desenfoque y la transparencia de la página de inicio de sesión del tema Argon y administrar las imágenes y los vídeos de fondo. Se recomienda Chrome."
+msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+msgstr "Aquí puede configurar el desenfoque y la transparencia de la página de inicio de sesión del tema Argon y administrar las imágenes y los vídeos de fondo."
 
 #: htdocs/luci-static/resources/argon/branding.js:60
 msgid "Invalid PNG image or dimensions."
@@ -301,6 +309,10 @@ msgstr "Mostrar u ocultar la navegación"
 #: htdocs/luci-static/resources/argon-overview.js:33
 msgid "Transmitted bytes"
 msgstr "Bytes transmitidos"
+
+#: htdocs/luci-static/resources/view/argon-config.js:171
+msgid "Turning this off also hides the admin wallpaper and restores the default admin appearance."
+msgstr "Desactivar esta opción también oculta el fondo de las páginas de administración y restaura la apariencia predeterminada de administración."
 
 #: htdocs/luci-static/resources/argon/branding.js:110
 msgid "Unable to load custom branding. Reload this page or reinstall the theme."
@@ -538,3 +550,23 @@ msgstr "Cancelar"
 #: htdocs/luci-static/resources/argon/updates.js
 msgid "Try again after %s."
 msgstr "Vuelva a intentarlo después de las %s."
+
+#: ucode/template/themes/argon/login_background.ut
+msgid "Play background video"
+msgstr "Reproducir el vídeo de fondo"
+
+#: ucode/template/themes/argon/login_background.ut
+msgid "Pause background video"
+msgstr "Pausar el vídeo de fondo"
+
+#: ucode/template/themes/argon/header.ut
+msgid "Skip to content"
+msgstr "Saltar al contenido"
+
+#: ucode/template/themes/argon/header.ut:46
+msgid "Close"
+msgstr "Cerrar"
+
+#: ucode/template/themes/argon/header.ut:43
+msgid "Navigation"
+msgstr "Navegación"

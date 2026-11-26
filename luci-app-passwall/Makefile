@@ -7,8 +7,8 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-passwall
-PKG_VERSION:=26.10.22
-PKG_RELEASE:=350
+PKG_VERSION:=26.11.23
+PKG_RELEASE:=390
 PKG_PO_VERSION:=$(PKG_VERSION)
 
 PKG_CONFIG_DEPENDS:= \
@@ -37,7 +37,7 @@ LUCI_DEPENDS:=+coreutils +coreutils-base64 +coreutils-nohup +coreutils-timeout +
 	+chinadns-ng +dns2socks +dnsmasq-full +ip-full \
 	+libuci-lua +lua +luci-compat +luci-lib-jsonc \
 	+microsocks +resolveip +tcping +lyaml \
-	+ipt2socks \
+	+ipt2socks +openssl-util \
 	+PACKAGE_$(PKG_NAME)_INCLUDE_Geoview:geoview \
 	+PACKAGE_$(PKG_NAME)_INCLUDE_SmartDNS:smartdns \
 	+PACKAGE_$(PKG_NAME)_INCLUDE_Haproxy:haproxy \
@@ -170,20 +170,6 @@ define Package/$(PKG_NAME)/conffiles
 /etc/config/passwall
 /etc/config/passwall_server
 /etc/passwall/
-endef
-
-define Package/$(PKG_NAME)/postinst
-#!/bin/sh
-rm -f $${IPKG_INSTROOT}/usr/share/passwall/rules/*.nft
-rm -rf $${IPKG_INSTROOT}/tmp/etc/passwall_tmp
-exit 0
-endef
-
-define Package/$(PKG_NAME)/postrm
-#!/bin/sh
-rm -f $${IPKG_INSTROOT}/usr/share/passwall/rules/*.nft
-rm -rf $${IPKG_INSTROOT}/tmp/etc/passwall_tmp
-exit 0
 endef
 
 include $(TOPDIR)/feeds/luci/luci.mk

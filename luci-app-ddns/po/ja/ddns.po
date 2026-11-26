@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: luci-app-ddns 2.4.0-1\n"
 "POT-Creation-Date: 2016-01-30 11:07+0100\n"
-"PO-Revision-Date: 2026-10-18 16:40+0000\n"
+"PO-Revision-Date: 2026-11-08 07:33+0000\n"
 "Last-Translator: Monarch <monarch.scrap-0p@users.noreply.hosted.weblate.org>"
 "\n"
 "Language-Team: Japanese <https://hosted.weblate.org/projects/openwrt/"
@@ -12,7 +12,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
-"X-Generator: Weblate 2026.11.dev0\n"
+"X-Generator: Weblate 2026.11.2.dev0\n"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:423
 msgid "\"../\" not allowed in path for Security Reason."
@@ -37,7 +37,7 @@ msgstr "非パブリック IP を許可"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:604
 msgid "Basic Settings"
-msgstr "基本設定"
+msgstr "一般設定"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:902
 msgid "Bind Network"
@@ -49,11 +49,9 @@ msgstr "特定のネットワークへのバインドはサポートされてい
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:361
 msgid ""
-"BusyBox's nslookup and hostip do not support TCP instead of the default UDP "
-"when sending requests to the DNS server!"
+"BusyBox's nslookup does not support TCP instead of the default UDP when "
+"sending requests to the DNS server!"
 msgstr ""
-"BusyBox の nslookup と hostip は、DNSサーバーをリクエストする際にデフォルト"
-"の UDP の代わりに TCP を使用する指定をサポートしていません！"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:372
 msgid ""
@@ -126,7 +124,7 @@ msgstr "DDNS プロバイダーの更新に使用されるカスタム更新ス�
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:706
 msgid "Custom update-URL"
-msgstr "手動アップデート-URL"
+msgstr "手動アップデート URL"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:724
 msgid "Custom update-script"
@@ -191,7 +189,7 @@ msgstr "ドメイン"
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/status/include/70_ddns.js:7
 #: applications/luci-app-ddns/root/usr/share/luci/menu.d/luci-app-ddns.json:3
 msgid "Dynamic DNS"
-msgstr "ダイナミックDNS"
+msgstr "ダイナミック DNS"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:267
 msgid "Dynamic DNS Version"
@@ -285,7 +283,7 @@ msgstr "全体設定"
 
 #: applications/luci-app-ddns/root/usr/share/rpcd/acl.d/luci-app-ddns.json:3
 msgid "Grant access to ddns procedures"
-msgstr "ddnsプロシージャへのアクセスを許可"
+msgstr "ddns プロシージャへのアクセスを許可"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:320
 msgid "HTTPS not supported"
@@ -307,7 +305,7 @@ msgstr "IP アドレスのバージョン"
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:506
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:632
 msgid "IPv4-Address"
-msgstr "IPv4アドレス"
+msgstr "IPv4 アドレス"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:949
 msgid "IPv6 address must be given in square brackets"
@@ -325,7 +323,7 @@ msgstr "IPv6 はサポートされていません"
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:508
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:634
 msgid "IPv6-Address"
-msgstr "IPv6アドレス"
+msgstr "IPv6 アドレス"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:436
 msgid ""
@@ -487,7 +485,7 @@ msgstr "次の更新"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:1144
 msgid "Next Verify"
-msgstr ""
+msgstr "次の確認"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:227
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:1134
@@ -578,7 +576,7 @@ msgstr "パスワード"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:786
 msgid "Path to CA-Certificate"
-msgstr "CA証明書のパス"
+msgstr "CA 証明書のパス"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:312
 msgid ""
@@ -791,7 +789,7 @@ msgstr "DDNS サービスリストを更新"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:682
 msgid "Update URL"
-msgstr ""
+msgstr "URL を更新"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:707
 msgid "Update URL for updating your DDNS Provider."
@@ -862,11 +860,9 @@ msgstr ""
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:375
 msgid ""
-"You should install 'bind-host' or 'knot-host' or 'drill' or 'hostip' "
-"package, if you need to specify a DNS server to detect your registered IP."
+"You should install 'bind-host' or 'knot-host' or 'drill' package, if you "
+"need to specify a DNS server to detect your registered IP."
 msgstr ""
-"登録済 IP を検出するため DNS サーバーを指定する必要がある場合は、bind-host、"
-"knot-host、drill または hostip パッケージをインストールする必要があります。"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:323
 msgid ""
@@ -890,8 +886,8 @@ msgstr ""
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:349
 msgid "cURL is installed, but libcurl was compiled without proxy support."
 msgstr ""
-"cURL はインストール済ですが、libcurl はプロキシ・サポートなしでコンパイルされ"
-"ています。"
+"cURL はインストール済みですが、libcurl はプロキシ・サポートなしでコンパイルさ"
+"れています。"
 
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:348
 msgid "cURL without Proxy Support"
@@ -937,6 +933,21 @@ msgstr "秒"
 #: applications/luci-app-ddns/htdocs/luci-static/resources/view/ddns/overview.js:791
 msgid "to run HTTPS without verification of server certificates (insecure)"
 msgstr "サーバー証明書の検証なしにHTTPSを実行する(安全ではありません)"
+
+#~ msgid ""
+#~ "BusyBox's nslookup and hostip do not support TCP instead of the default "
+#~ "UDP when sending requests to the DNS server!"
+#~ msgstr ""
+#~ "BusyBox の nslookup と hostip は、DNSサーバーをリクエストする際にデフォル"
+#~ "トの UDP の代わりに TCP を使用する指定をサポートしていません！"
+
+#~ msgid ""
+#~ "You should install 'bind-host' or 'knot-host' or 'drill' or 'hostip' "
+#~ "package, if you need to specify a DNS server to detect your registered IP."
+#~ msgstr ""
+#~ "登録済 IP を検出するため DNS サーバーを指定する必要がある場合は、bind-"
+#~ "host、knot-host、drill または hostip パッケージをインストールする必要があ"
+#~ "ります。"
 
 #~ msgid "DDns"
 #~ msgstr "DDNS"

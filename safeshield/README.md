@@ -399,6 +399,7 @@ Available methods:
 safeshield.status
 safeshield.config
 safeshield.statistics
+safeshield.statistics_summary
 safeshield.config_update
 safeshield.set_enabled
 safeshield.refresh
@@ -419,6 +420,18 @@ Read lightweight local DNS statistics:
 ubus call safeshield statistics
 /etc/init.d/safeshield statistics
 ```
+
+For dashboards that need collector health and aggregate counters only, use:
+
+```sh
+ubus call safeshield statistics_summary
+```
+
+The summary retains configuration, service health, source details and totals,
+but omits the potentially large `hourly` and `devices` arrays. The original
+`statistics` response remains unchanged (schema v3). Both methods read the
+current statistics snapshot; the summary specifically reduces RPC-side array
+normalization and JSON response size, not the snapshot file read itself.
 
 Statistics are collected from dnsmasq cumulative SafeShield UBus counters. Raw queried domains
 are never written to the statistics state. Loopback (`127.0.0.0/8` and `::1`)
@@ -473,6 +486,19 @@ or included in status output. Routine uploads run every 30 minutes and contain a
 consistent two-hour projection of the local hourly data. A full retained snapshot
 is sent on initial synchronization, after a failed upload has recovered, and
 periodically (approximately every 12 hours) to reconcile any missed window.
+
+To avoid one malformed historical client hour blocking the entire retained
+statistics upload, the collector checks per-client dnsmasq deltas against the
+router-wide delta before recording them. A poll with inconsistent attribution
+keeps the router counters but skips that poll's untrustworthy client breakdown.
+When exporting JSON, any retained hour with client attribution exceeding the
+router counters (or blocked counts exceeding queries) is projected with router
+hourly totals intact and the affected hour's client attribution omitted. This
+also repairs the cloud projection of previously stored inconsistent hours after
+upgrade without deleting or rewriting the raw TSV/journal history. The optional
+`source.sanitized_hours` field counts hours handled this way in each JSON
+projection. Only the affected client-hour breakdown is unavailable; the other
+hours and router totals remain intact. Schema v3 and upload ordering are unchanged.
 
 The uploader preserves the exact pending JSON across network retries. If the Hub
 committed a request but the HTTP acknowledgement was lost, retrying the same

@@ -6,8 +6,8 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=safeshield
-PKG_VERSION:=0.3.25
-PKG_RELEASE:=4
+PKG_VERSION:=0.3.28
+PKG_RELEASE:=7
 
 PKG_MAINTAINER:=Beomjun Kang <kals323@gmail.com>
 PKG_LICENSE:=GPL-3.0-or-later
@@ -25,6 +25,7 @@ define Package/safeshield
 	+jsonfilter \
 	+uci \
 	+uclient-fetch \
+	+curl \
 	+dnsmasq \
 	+gzip \
 	+coreutils-sort \
@@ -80,6 +81,7 @@ define Package/safeshield/install
 	$(INSTALL_BIN) ./files/usr/lib/safeshield/log.sh $(1)/usr/lib/safeshield/log.sh
 	$(INSTALL_BIN) ./files/usr/lib/safeshield/status.sh $(1)/usr/lib/safeshield/status.sh
 	$(INSTALL_BIN) ./files/usr/lib/safeshield/utils.sh $(1)/usr/lib/safeshield/utils.sh
+	$(INSTALL_DATA) ./files/usr/lib/safeshield/locking.sh $(1)/usr/lib/safeshield/locking.sh
 	$(INSTALL_DATA) ./files/usr/lib/safeshield/config.sh $(1)/usr/lib/safeshield/config.sh
 	$(INSTALL_BIN) ./files/usr/lib/safeshield/identity.sh $(1)/usr/lib/safeshield/identity.sh
 	$(INSTALL_DATA) ./files/usr/lib/safeshield/dns.sh $(1)/usr/lib/safeshield/dns.sh

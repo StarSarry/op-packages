@@ -1,5 +1,98 @@
 # Changelog
 
+## [0.3.28-r1] - 2026-11-18
+
+- Bump version for release.
+
+## [0.3.27-r3] - 2026-11-16
+
+### Fixed
+
+- Use uclient-fetch for SafeShield artifact downloads even when curl is available, avoiding a whole-file curl deadline on growing block lists.
+
+### Improved
+
+- Set the artifact transfer inactivity timeout to 30 seconds while retaining a separate 20-second curl API timeout and rejecting API redirects.
+- Keep signed artifact URLs out of download error logs and remove incomplete files on failure.
+- Declare both curl and uclient-fetch as package dependencies to make the transport choice predictable.
+
+### Tests
+
+- Added transport selection, timeout, and credential-redaction regression coverage.
+
+## [0.3.27-r2] - 2026-11-15
+
+### Improved
+
+- Increased the default artifact download timeout from 10 to 20 seconds.
+
+### Tests
+
+- Verified the packaged default, shell configuration fallback, RPC default, and explicitly configured timeout values.
+
+## [0.3.27-r1] - 2026-11-11
+
+- Bump version for release.
+
+## [0.3.26-r2] - 2026-11-11
+
+### Fixed
+
+- Fixed an issue where an error in per-device statistics for a single historical hour could block the upload of all router protection statistics.
+- Added safeguards to prevent incorrect per-device statistics from accumulating when DNS counters change unexpectedly.
+
+### Improved
+
+- Preserved router-wide statistics while excluding only the affected per-device details from uploads. The original stored statistics remain unchanged.
+- Added the number of sanitized hourly buckets to the upload JSON for easier troubleshooting.
+
+### Tests
+
+- Added tests covering historical statistics errors, excessive per-device counter values, preservation of valid statistics, recovery after restarts, and anonymous device aggregation.
+
+## [0.3.26-r1] - 2026-11-02
+
+- Bump version for release.
+
+## [0.3.25-r4] - 2026-11-02
+
+### Improved
+
+- Reduce large temporary files during blocklist refreshes and clean up intermediate files after each refresh to lower memory usage on routers.
+- Add a lightweight statistics summary method for dashboards that only need aggregate information while preserving the existing full statistics response.
+
+### Tests
+
+- Verify custom allow/block rule precedence, generated blocklist output, and compatibility between the new statistics summary and existing detailed queries.
+
+## [0.3.25-r3] - 2026-11-01
+
+### Improved
+
+- Skip expired-statistics cleanup when the retention boundary is unchanged, and avoid recomputing aggregate totals when statistics have not changed.
+- Skip temporary devices with no records in the upload period when preparing recent statistics uploads.
+- Batch status initialization and refresh-result updates to reduce repeated reads and writes of the status file.
+
+### Tests
+
+- Verify that retention behavior and upload output remain unchanged and that batched status updates preserve all values.
+
+## [0.3.25-r2] - 2026-11-01
+
+### Fixed
+
+- Harden locking to prevent concurrent statistics collector and automatic refresh runs.
+- Avoid unnecessary DNS service restarts when blocklist downloads or preparation fail, preserving existing protection.
+- Prevent status file corruption and lost updates during concurrent status writes.
+
+### Improved
+
+- Use built-in OpenWrt tools for locking without requiring a separate `flock` command.
+
+### Tests
+
+- Test lock contention, stale-lock recovery, lock ownership, concurrent status updates, and avoidance of DNS restarts after pre-installation failures.
+
 ## [0.3.25-r1] - 2026-10-10
 
 - Bump version for release.

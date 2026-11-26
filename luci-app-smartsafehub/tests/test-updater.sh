@@ -3,6 +3,7 @@
 set -eu
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
+export SMARTSAFEHUB_HTTP_LIB="$ROOT_DIR/root/usr/lib/smartsafehub/http.sh"
 export SMARTSAFEHUB_COMMON_LIB="$ROOT_DIR/root/usr/lib/smartsafehub/common.sh"
 UPDATER="$ROOT_DIR/root/usr/libexec/smartsafehub-updater"
 MAKEFILE="$ROOT_DIR/Makefile"
@@ -28,7 +29,7 @@ assert_not_contains() {
 	fi
 }
 
-assert_contains "$MAKEFILE" 'LUCI_DEPENDS:=+luci-base +rpcd-mod-ucode +ucode +ucode-mod-ubus +ucode-mod-fs +ucode-mod-uci +procd +uclient-fetch +jsonfilter +igmpproxy +safeshield'
+assert_contains "$MAKEFILE" 'LUCI_DEPENDS:=+luci-base +rpcd-mod-ucode +ucode +ucode-mod-ubus +ucode-mod-fs +ucode-mod-uci +procd +curl +uclient-fetch +jsonfilter +igmpproxy +safeshield'
 SAFESHIELD_MIN_VERSION="$(sed -n 's/^LUCI_EXTRA_DEPENDS:=safeshield (>=\([^)]*\))$/\1/p' "$MAKEFILE")"
 [ -n "$SAFESHIELD_MIN_VERSION" ] || fail 'unable to read safeshield minimum version from LUCI_EXTRA_DEPENDS'
 PKG_VERSION="$(awk -F ':=' '$1 == "PKG_VERSION" { print $2; exit }' "$MAKEFILE")"
@@ -116,6 +117,18 @@ fi
 cp "${MOCK_RELEASE_ROOT:?}/$name" "$output"
 MOCKFETCH
 chmod +x "$TMP/bin/uclient-fetch"
+
+cat > "$TMP/bin/jsonfilter" <<'MOCKJSON'
+#!/bin/sh
+# Test-only adapter for OpenWrt jsonfilter's -i/-e interface.
+[ "${1:-}" = '-i' ] && [ "${3:-}" = '-e' ] || exit 1
+case "${4:-}" in
+  '@.package') jq -er '.package' "$2" ;;
+  '@.version') jq -er '.version' "$2" ;;
+  *) exit 1 ;;
+esac
+MOCKJSON
+chmod +x "$TMP/bin/jsonfilter"
 
 cat > "$TMP/bin/apk" <<'MOCKAPK'
 #!/bin/sh
@@ -221,7 +234,8 @@ export SMARTSAFEHUB_UPDATER_AUTO_RETRY_COUNT_MARKER="$TMP/auto-retry-count"
 export SMARTSAFEHUB_UPDATER_APK_WORLD_FILE="$TMP/world"
 export SMARTSAFEHUB_UPDATER_REPOSITORY_DIR="$TMP/repos"
 export SMARTSAFEHUB_UPDATER_APK_BIN="$TMP/bin/apk"
-export SMARTSAFEHUB_UPDATER_UCLIENT_FETCH_BIN="$TMP/bin/uclient-fetch"
+export SMARTSAFEHUB_HTTP_CURL_BIN="$ROOT_DIR/tests/support/mock-curl" MOCK_CURL_BACKEND="$TMP/bin/uclient-fetch"
+export SMARTSAFEHUB_UPDATER_JSONFILTER_BIN="$TMP/bin/jsonfilter"
 export SMARTSAFEHUB_UPDATER_UCI_BIN="$TMP/bin/uci"
 export SMARTSAFEHUB_UPDATER_RPCD_INIT=''
 export SMARTSAFEHUB_UPDATER_LUCI_INDEX_CACHE="$TMP/luci-indexcache"
@@ -242,6 +256,62 @@ assert_contains "$TMP/release-notes.json" "\"version\": \"0.2.3-r1\""
 assert_contains "$TMP/release-notes.json" "\"version\": \"0.2.2-r1\""
 assert_not_contains "$TMP/release-notes.json" "\"version\": \"0.2.1-r1\""
 assert_contains "$TMP/release-notes.json" '"complete": true'
+
+# When many releases fall between installed and available, avoid dozens of
+# sequential downloads and show only the latest release note (compact JSON is valid).
+cp "$TMP/releases/index.json" "$TMP/releases/index.original.json"
+cp "$TMP/releases/$RELEASE_VERSION.json" "$TMP/releases/latest.original.json"
+cat > "$TMP/releases/$RELEASE_VERSION.json" <<EOF2
+{"schema_version":1,"package":"luci-app-smartsafehub","version":"$RELEASE_VERSION","summary":"Latest release only"}
+EOF2
+{
+  printf '{ "schema_version": 1, "package": "luci-app-smartsafehub", "releases": [\n'
+  printf '{ "version": "%s" },\n' "$RELEASE_VERSION"
+  counter=15
+  while [ "$counter" -gt 0 ]; do
+    printf '{ "version": "0.2.30-r%s" },\n' "$counter"
+    counter=$((counter - 1))
+  done
+  printf '{ "version": "0.2.1-r1" } ] }\n'
+} > "$TMP/releases/index.json"
+rm -f "$TMP/fetch.log" "$TMP/release-notes.json"
+"$UPDATER" check
+assert_contains "$TMP/release-notes.json" '"complete": false'
+assert_contains "$TMP/release-notes.json" '"summary":"Latest release only"'
+assert_contains "$TMP/fetch.log" "${RELEASE_VERSION}.json"
+assert_not_contains "$TMP/fetch.log" '0.2.30-r15.json'
+jq -e --arg version "$RELEASE_VERSION" \
+  '.releases | length == 1 and .[0].version == $version' "$TMP/release-notes.json" >/dev/null || \
+  fail 'large release history must keep only the newest release note'
+
+# If the newest note becomes unreachable, preserve a matching cached note
+# instead of showing older entries as if they were the current release.
+cp "$TMP/release-notes.json" "$TMP/release-notes.before.json"
+MOCK_FETCH_FAIL_NAME="$RELEASE_VERSION.json" "$UPDATER" check
+cmp -s "$TMP/release-notes.before.json" "$TMP/release-notes.json" || \
+  fail 'failed latest release fetch must preserve the last-known-good note'
+
+# An index outage must also fall back to the available version directly.
+rm -f "$TMP/release-notes.json" "$TMP/fetch.log"
+MOCK_FETCH_FAIL_NAME=index.json "$UPDATER" check
+assert_contains "$TMP/release-notes.json" '"complete": false'
+jq -e --arg version "$RELEASE_VERSION" \
+  '.releases | length == 1 and .[0].version == $version' "$TMP/release-notes.json" >/dev/null || \
+  fail 'index fetch failure must still fetch the latest note'
+
+cp "$TMP/releases/index.original.json" "$TMP/releases/index.json"
+cp "$TMP/releases/latest.original.json" "$TMP/releases/$RELEASE_VERSION.json"
+rm -f "$TMP/release-notes.json"
+
+# A newly fetched note with invalid JSON must not be shown as the newest.
+# Do not make extra requests for historical notes when the newest is unusable.
+printf '{"package":"luci-app-smartsafehub","version":"%s","summary":"broken"' \
+  "$RELEASE_VERSION" > "$TMP/releases/$RELEASE_VERSION.json"
+rm -f "$TMP/release-notes.json" "$TMP/fetch.log"
+"$UPDATER" check
+[ ! -e "$TMP/release-notes.json" ] || fail 'malformed latest release note must not be cached'
+assert_not_contains "$TMP/fetch.log" '0.2.3-r1.json'
+cp "$TMP/releases/latest.original.json" "$TMP/releases/$RELEASE_VERSION.json"
 
 # One missing intermediate note should preserve the other notes and mark the bundle incomplete.
 rm -f "$TMP/release-notes.json"

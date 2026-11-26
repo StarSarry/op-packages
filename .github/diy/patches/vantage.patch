@@ -1,23 +1,84 @@
+--- a/luci-theme-vantage/htdocs/luci-static/resources/menu-vantage.js
++++ b/luci-theme-vantage/htdocs/luci-static/resources/menu-vantage.js
+@@ -2512,10 +2512,10 @@ return baseclass.extend({
+ 	},
+ 
+ 	decorateForms() {
+-		document.querySelectorAll('.cbi-value > .cbi-value-title + .cbi-value-field > .cbi-value-description:not(.vt-help-text)')
++		/* document.querySelectorAll('.cbi-value > .cbi-value-title + .cbi-value-field > .cbi-value-description:not(.vt-help-text)')
+ 			.forEach(desc => this.addFieldHelp(desc));
+ 		document.querySelectorAll(':is(.cbi-map-descr, .cbi-section-descr):not(:has(> .vt-help))')
+-			.forEach(desc => this.addIntroHelp(desc));
++			.forEach(desc => this.addIntroHelp(desc)); */
+ 		this.markRepeats();
+ 		this.decorateRowActions();
+ 	},
+
+--- a/luci-theme-vantage/root/etc/config/vantage_theme
++++ b/luci-theme-vantage/root/etc/config/vantage_theme
+@@ -13,3 +13,4 @@
+ # the same with _wired), which are best changed there.
+ 
+ config appearance 'appearance'
++	option brand 'hostname'
+
+--- a/luci-app-vantage/htdocs/luci-static/resources/view/vantage/overview.js
++++ b/luci-app-vantage/htdocs/luci-static/resources/view/vantage/overview.js
+@@ -583,8 +583,8 @@ return view.extend({
+ 	asidePage: function(media, themeHere, hasLuciDashboard, hasOverview) {
+ 		var theme = (typeof media === 'string') ? media.replace(/\/+$/, '').replace(/^.*\//, '') : '';
+ 		if (!theme || theme === 'vantage' || themeHere !== true) return null;
+-		if (hasLuciDashboard === true) return LUCI_DASHBOARD.slice();
+-		return hasOverview === false ? null : LUCI_OVERVIEW.slice();
++		// if (hasLuciDashboard === true) return LUCI_DASHBOARD.slice();
++		// return hasOverview === false ? null : LUCI_OVERVIEW.slice();
+ 	},
+ 
+ 	/* before load() asks for anything. Under Vantage (or an unnamed theme)
+
+--- a/luci-app-vantage/root/usr/share/luci/menu.d/zz-luci-app-vantage.json
++++ b/luci-app-vantage/root/usr/share/luci/menu.d/zz-luci-app-vantage.json
+@@ -1,5 +1,5 @@
+ {
+-	"admin/dashboard": {
++	"admin/status/dashboard": {
+ 		"title": "Dashboard",
+ 		"order": 1,
+ 		"action": {
+@@ -10,18 +10,6 @@
+ 			"acl": [ "luci-app-vantage" ]
+ 		}
+ 	},
+-	"admin/status/dashboard": {
+-		"title": "Dashboard",
+-		"order": 2,
+-		"action": {
+-			"type": "view",
+-			"path": "dashboard/index"
+-		},
+-		"depends": {
+-			"acl": [ "luci-mod-dashboard-index" ],
+-			"fs": { "/www/luci-static/resources/view/dashboard/index.js": "file" }
+-		}
+-	},
+ 	"admin/network/firewall/overview": {
+ 		"title": "Overview",
+ 		"order": 5,
+
 --- a/luci-app-vantage/htdocs/luci-static/resources/vantage/app.css
 +++ b/luci-app-vantage/htdocs/luci-static/resources/vantage/app.css
-@@ -156,6 +156,8 @@ html[data-darkmode="true"] .vt-app {
- 	position: static; z-index: auto; display: block; overflow: visible;
- 	margin: 0; padding: 0; border: 0; border-radius: 0;
- 	background: none; box-shadow: none; color: inherit; text-shadow: none;
-+	width: 100%;
-+    flex-direction: unset;
- }
- .vt-app :where(header, footer) :where(p, a, span) { line-height: inherit; text-shadow: none; }
- .vt-app :where(header) :where(a) { color: inherit; }
-@@ -477,6 +479,12 @@ html[data-darkmode="true"] .vt-app {
+@@ -568,6 +568,15 @@ html[data-darkmode="true"] .vt-app {
  	display: flex; align-items: center; gap: 14px;
- 	margin: 2px 0 14px;
+ 	margin: 2px 0 var(--vt-sp-4);
  }
 +header::after {
 +	height:0 !important;	
 +}
 +h2, h3{
 +	background-color:transparent;
++}
++header.bg-primary {
++    background:none !important;
 +}
  .vt-app .vt-orb {
  	position: relative; flex: none;
@@ -37,8 +98,8 @@
  	--fs-sm: 12px;
  	--fs-base: 13px;
  	--fs-md: 14px;
-@@ -37,7 +37,7 @@
- 	--r-lg: 8px;
+@@ -50,7 +50,7 @@
+ 	--r-xl: 12px;
  
  	--rail-w: 56px;
 -	--rail-w-pinned: 224px;
@@ -46,7 +107,7 @@
  	--top-h: 52px;
  	--ctl-h: 36px;              /* every control: inputs, selects, buttons, tabs, chips */
  	--label-w: 180px;           /* form label column */
-@@ -328,7 +328,7 @@ html[data-darkmode="true"] .vt-brand-tile { fill: #16181b; }
+@@ -427,7 +427,7 @@ html[data-rail="pinned"] .vt-brand-name:not([hidden]) { display: block; }
  	white-space: nowrap;
  }
  .vt-rail-link svg { flex: none; width: 20px; height: 20px; }
@@ -55,7 +116,7 @@
  .vt-rail-caret { display: none; width: 14px; height: 14px; color: var(--text-3); transition: transform .15s; }
  
  .vt-rail-link:hover, .vt-rail-item.is-open > .vt-rail-link { background: var(--s3); color: var(--text); }
-@@ -371,7 +371,7 @@ html[data-rail="pinned"] .vt-frame { margin-left: var(--rail-w-pinned); }
+@@ -469,7 +469,7 @@ html[data-rail="pinned"] .vt-frame { margin-left: var(--rail-w-pinned); }
  	padding: 5px 10px;
  	border-left: 1px solid var(--line-2);
  	color: var(--text-2);
@@ -64,8 +125,17 @@
  	white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
  	text-decoration: none !important;
  }
-@@ -716,6 +716,12 @@ html:has(.vt-tabs:not([hidden])) { --stick-top: calc(var(--top-h) + 41px); }
- 	border-radius: 10px;
+@@ -635,7 +635,7 @@ a.vt-crumb:hover { color: var(--text); }
+ .vt-appear-note[hidden] { display: none; }
+ /* the daily check's line of help, under its options */
+ .vt-appear-set > .vt-appear-note { margin-top: 6px; }
+-.vt-appear-ver { margin: 0; color: var(--text-3); font-size: var(--fs-micro); }
++.vt-appear-ver { margin: 0; color: var(--text-3); font-size: var(--fs-micro); display:none; }
+ .vt-appear-num { font-family: var(--mono); }
+ .vt-appear-check { margin: 0; padding: 0; border: 0; background: none; color: var(--accent-text); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+ .vt-appear-check[aria-disabled="true"] { color: var(--text-3); cursor: default; text-decoration: none; }
+@@ -883,6 +883,12 @@ html[data-vt-alert="err"] #indicators > span[data-indicator="poll-status"][data-
+ 	border-radius: var(--r-lg);
  	box-shadow: var(--v-shadow);
  	min-width: 0;
 +	background-clip: padding-box;
@@ -75,19 +145,16 @@
 +    padding: 10px !important;
 +    border: none !important;
  }
- /* card header row */
- .cbi-section > h3:first-child, .cbi-section > legend:first-child, .cbi-section > .cbi-title:first-child,
-@@ -1982,7 +1988,28 @@ html:not([data-darkmode="true"]) .vt-login-page {
- 		linear-gradient(90deg, rgba(20, 23, 26, .04) 1px, transparent 1px) 0 0 / 32px 32px,
- 		var(--bg);
+ /* Card padding supplies the space after the final paragraph. */
+ .cbi-section > p:last-child { margin-bottom: 0; }
+@@ -2621,7 +2627,22 @@ html:not([data-darkmode="true"]) .vt-login-page {
  }
--.vt-login { width: min(380px, 100%); }
+ /* the backdrop (login.js: packets or starfield), between the grid and the card */
+ .vt-login-sky { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+-.vt-login { position: relative; width: min(380px, 100%); }
 +.vt-login {
-+	width: min(380px, 100%);
++	position: relative; width: min(380px, 100%);
 +	z-index: 1;
-+}
-+.vt-login-page{
-+	background:none !important;
 +}
 +.vt-login-page::before {
 +	content: "";
@@ -99,15 +166,12 @@
 +	opacity: 0.4;
 +}
 +html:not([data-darkmode="true"]) .vt-login-page::before {
-+	opacity: 0.7;
-+}
-+#packages {
-+ width: 100% !important;
++	opacity: 0.6;
 +}
  .vt-login-card {
  	padding: var(--sp-6);
  	background: var(--s1);
-@@ -2051,7 +2075,7 @@ html:not([data-darkmode="true"]) .vt-login-page {
+@@ -2691,7 +2715,7 @@ body[data-page="admin-statistics-graphs"] p.controls > .nowrap > .cbi-button { m
  .cbi-section-table .ifacebox-body img { width: 18px; height: 18px; }
  [id$="-ifc-description"], .cbi-value-field > div[id$="-ifc-description"] {
  	display: flex; flex-wrap: wrap; align-items: flex-start;
@@ -124,53 +188,27 @@
  LUCI_DESCRIPTION:=A console-style LuCI theme: icon rail with flyouts, \
  	breadcrumb, page tabs, Ctrl+K command palette, light and dark modes.
 -LUCI_DEPENDS:=+luci-base
-+LUCI_DEPENDS:=+luci-base +luci-app-vantage
++LUCI_DEPENDS:=+luci-base +luci-app-vantage +luci-app-vantage-traffic
  LUCI_MAINTAINER:=anothaDev <10740588+anothaDev@users.noreply.github.com>
  LUCI_URL:=https://github.com/anothaDev/luci-theme-vantage
  
-diff --git a/luci-app-vantage/root/usr/share/luci/menu.d/luci-app-vantage.json b/luci-app-vantage/root/usr/share/luci/menu.d/z-luci-app-vantage.json
-similarity index 85%
-rename from luci-app-vantage/root/usr/share/luci/menu.d/luci-app-vantage.json
-rename to luci-app-vantage/root/usr/share/luci/menu.d/z-luci-app-vantage.json
-index ad0a166..c58c860 100644
---- a/luci-app-vantage/root/usr/share/luci/menu.d/luci-app-vantage.json
-+++ b/luci-app-vantage/root/usr/share/luci/menu.d/z-luci-app-vantage.json
-@@ -1,5 +1,5 @@
- {
--	"admin/dashboard": {
-+	"admin/status/dashboard": {
- 		"title": "Dashboard",
- 		"order": 1,
- 		"action": {
 
 --- a/luci-theme-vantage/ucode/template/themes/vantage/header.ut
 +++ b/luci-theme-vantage/ucode/template/themes/vantage/header.ut
-@@ -12,6 +12,8 @@
- 	const authed = !!ctx.authsession;
- 	const page_title = (authed && dispatched?.title) ? striptags(_(dispatched.title)) : 'LuCI';
- 	const lang = entityencode(dispatcher.lang ?? 'en', true);
-+	const boardinfo = ubus.call("system", "board");
-+	const hostname = striptags(boardinfo?.hostname ?? '?');
- -%}
- <!DOCTYPE html>
- <html lang="{{ lang }}" data-darkmode="true">
-@@ -22,8 +24,8 @@
- <title>{{ entityencode(page_title, true) }} · LuCI</title>
- <script>
- (function (r) {
--	var p = 'auto', rail = '';
--	try { p = localStorage.getItem('vantage.theme') || 'auto'; rail = localStorage.getItem('vantage.rail') || ''; } catch (e) {}
-+	var p = 'auto', rail = 'pinned';
-+	try { p = localStorage.getItem('vantage.theme') || 'auto'; rail = localStorage.getItem('vantage.rail') || 'pinned'; } catch (e) {}
+@@ -74,7 +74,7 @@
+ 		return ok[0];
+ 	}
+ 	var p = look('theme', 'vantage.theme.own', 'vantage.theme', [ 'auto', 'light', 'dark' ]), rail = '';
+-	try { rail = localStorage.getItem('vantage.rail') || ''; } catch (e) {}
++	try { rail = localStorage.getItem('vantage.rail') || 'pinned'; } catch (e) {}
  	var dark = (p === 'dark') || (p !== 'light' && !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches));
  	r.setAttribute('data-darkmode', dark ? 'true' : 'false');
  	r.setAttribute('data-theme', p);
-@@ -46,8 +48,15 @@
+@@ -99,7 +99,14 @@
  {% if (authed): %}
- 	<nav class="vt-rail" id="vt-rail" aria-label="{{ entityencode(_('Main navigation'), true) }}">
- 		<a class="vt-brand" href="{{ dispatcher.build_url('admin') }}" aria-label="{{ entityencode(_('Home'), true) }}">
+ 	<nav class="vt-rail" id="vt-rail" aria-label="{{ entityencode(_('Main navigation', 'vantage-theme'), true) }}">
+ 		<a class="vt-brand" href="{{ dispatcher.build_url('admin') }}" aria-label="{{ entityencode(_('Home', 'vantage-theme'), true) }}">
 -			<svg viewBox="0 0 32 32" width="32" height="32" aria-hidden="true"><rect x="1" y="1" width="30" height="30" rx="7" class="vt-brand-tile"/><path d="M9 10.5 16 22" class="vt-brand-l"/><path d="M16 22 23 10.5" class="vt-brand-r"/><circle cx="23" cy="10.5" r="1.9" class="vt-brand-dot"/></svg>
--			<span class="vt-brand-word">Vantage</span>
 +			<svg viewBox="0 0 32 32" width="32" height="32" aria-hidden="true">
 +			<rect x="1" y="1" width="30" height="30" rx="7" class="vt-brand-tile"></rect>
 +			<path d="M10 10.5 10 21.5" class="vt-brand-l"></path>
@@ -179,23 +217,13 @@ index ad0a166..c58c860 100644
 +			<circle cx="21.5" cy="10.5" r="1.9" class="vt-brand-dot"></circle>
 +			<circle cx="21.5" cy="21.5" r="1.9" class="vt-brand-dot"></circle>
 +			</svg>
-+			<span class="vt-brand-word">{{ hostname }}</span>
+ 			<span class="vt-brand-name" id="vt-brand-name" hidden></span>
  		</a>
  		<ul class="vt-rail-list" id="vt-rail-list"></ul>
- 		<div class="vt-rail-foot">
 
 --- a/luci-theme-vantage/ucode/template/themes/vantage/sysauth.ut
 +++ b/luci-theme-vantage/ucode/template/themes/vantage/sysauth.ut
-@@ -12,6 +12,8 @@
- 	if (type(tls) == 'string')
- 		tls = split(tls, /\s+/);
- 	const tls_ports = uniq(filter(map(tls, e => +(match(e, /\d+$/)?.[0] ?? 0)), p => (p > 0 && p <= 65535)));
-+	const boardinfo = ubus.call("system", "board");
-+	const hostname = striptags(boardinfo?.hostname ?? '?');
- -%}
- <!DOCTYPE html>
- <html lang="{{ entityencode(dispatcher.lang ?? 'en', true) }}" data-darkmode="true">
-@@ -37,9 +39,16 @@
+@@ -46,7 +46,14 @@
  <main class="vt-login">
  	<div class="vt-login-card">
  		<div class="vt-login-head">
@@ -208,12 +236,9 @@ index ad0a166..c58c860 100644
 +			<circle cx="21.5" cy="10.5" r="1.9" class="vt-brand-dot"></circle>
 +			<circle cx="21.5" cy="21.5" r="1.9" class="vt-brand-dot"></circle>
 +			</svg>
- 			<div>
--				<h1 class="vt-login-title">Vantage</h1>
-+				<h1 class="vt-login-title">{{ hostname }}</h1>
- 				<p class="vt-login-sub"><span class="vt-login-dot" aria-hidden="true"></span>{{ entityencode(_('Authorization Required'), true) }}</p>
- 			</div>
+ 			<h1 class="vt-login-title">{{ entityencode(host ?? _('Authorization Required'), true) }}</h1>
  		</div>
+ 
 diff --git a/luci-theme-vantage/htdocs/luci-static/vantage/pattern.svg b/luci-theme-vantage/htdocs/luci-static/vantage/pattern.svg
 new file mode 100644
 index 000000000..72eb03cdc

@@ -6,7 +6,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-hermes
 PKG_VERSION:=2026.05.10
-PKG_RELEASE:=3
+PKG_RELEASE:=5
 
 PKG_MAINTAINER:=Hermes Agent
 PKG_LICENSE:=GPL-3.0

@@ -79,3 +79,164 @@ test('추천 규칙 API 조회는 실제 공유기 앱에서만 주입된다', (
   assert.match(app, /onLoadRecommendedRulesStatus=\{fetchRecommendedRulesStatus\}/);
   assert.doesNotMatch(demo, /onLoadRecommendedRulesStatus=/);
 });
+
+
+test('SmartSafeHub Account and Apps use fictional fixtures, not live APIs', () => {
+  const routes = readFileSync(resolve(root, 'app/routes.ts'), 'utf8');
+  const app = readFileSync(resolve(root, 'demo/main.tsx'), 'utf8');
+  const fixtures = readFileSync(resolve(root, 'demo/data.ts'), 'utf8');
+  assert.match(routes, /'rules', 'account', 'apps', 'system'/);
+  for (const [route, component] of [['account', 'SmartSafeHubAccountPage'], ['apps', 'AppsPage']]) {
+    assert.match(app, new RegExp(`case '${route}':`));
+    assert.ok(app.includes(`<${component}`), `${component} not reused by demo`);
+    assert.match(app, new RegExp(`<${component}[^;]*?demo`, 's'));
+  }
+  for (const fixture of ['demoAccount', 'demoApps', 'demoAppsStatus', 'demoAppsMetrics']) {
+    assert.ok(fixtures.includes(`export const ${fixture}:`), `missing ${fixture}`);
+    assert.ok(app.includes(fixture), `unused ${fixture}`);
+  }
+  assert.match(fixtures, /accountRegistered: true/);
+  assert.match(fixtures, /pairingCode: null/);
+  assert.match(fixtures, /id: 'network-usage-monitor'/);
+  assert.match(fixtures, /id: 'retro-arcade'/);
+  assert.match(fixtures, /id: 'arcdrop'/);
+  assert.match(fixtures, /id: 'wake-on-lan'/);
+  assert.match(fixtures, /category: 'entertainment'/);
+  const newFixtures = fixtures.slice(fixtures.indexOf('export const demoAccount:'), fixtures.indexOf('export const demoDevices:'));
+  assert.doesNotMatch(newFixtures, /https?:\/\/|\/cgi-bin\/|password|token|api_key/i);
+  assert.match(app, /accountRegistered=\{demoAccount\.accountRegistered\}/);
+});
+
+test('demo showcases verified Apps versions, upgrade badge, and installed sizes without changing router state', () => {
+  const fixtures = readFileSync(resolve(root, 'demo/data.ts'), 'utf8');
+  const catalog = fixtures.split('export const demoApps: AppsCatalog = {')[1].split('export const demoAppsStatus:')[0];
+  const status = fixtures.split('export const demoAppsStatus: AppsInstallStatus = {')[1].split('export const demoAppsMetrics:')[0];
+  const metrics = fixtures.split('export const demoAppsMetrics: AppsMetrics = {')[1].split('export const demoDevices:')[0];
+
+  assert.ok(catalog.indexOf("id: 'retro-arcade'") < catalog.indexOf("id: 'network-usage-monitor'"),
+    'demo card ordering should match the actual Apps page');
+  assert.match(catalog, /id: 'retro-arcade',[\s\S]*?publisherType: 'first_party',[\s\S]*?version: '1\.2\.0-r4'/);
+  assert.match(catalog, /id: 'jarbis',[\s\S]*?category: 'iot',[\s\S]*?publisherType: 'first_party',[\s\S]*?version: '0\.2\.4-r1'/);
+  assert.ok(catalog.indexOf("id: 'jarbis'") < catalog.indexOf("id: 'retro-arcade'"));
+  assert.match(catalog, /id: 'network-usage-monitor',[\s\S]*?version: '2025\.06\.02~29236be6-r1'/);
+  assert.match(catalog, /id: 'travelmate',[\s\S]*?publisherType: 'third_party',[\s\S]*?version: '2\.4\.9-r5'/);
+  assert.match(catalog, /id: 'wake-on-lan',[\s\S]*?category: 'utilities',[\s\S]*?version: '26\.288\.56989~75a306d'/);
+  assert.ok(catalog.indexOf("id: 'network-usage-monitor'") < catalog.indexOf("id: 'wake-on-lan'"));
+  assert.match(status, /'wake-on-lan': \{\s*installed: true,\s*partial: false,\s*managed: true/);
+
+  assert.match(status, /jarbis: \{\s*installed: true,\s*partial: false,\s*managed: true,\s*updateAvailable: false,\s*installedVersion: '0\.2\.4-r1'/);
+  assert.match(status, /'retro-arcade': \{\s*installed: true,\s*partial: false,\s*managed: true,\s*updateAvailable: true,\s*installedVersion: '1\.0\.0-r1'/);
+  assert.match(status, /'network-usage-monitor': \{\s*installed: true,\s*partial: false,\s*managed: true,\s*updateAvailable: false,\s*installedVersion: '2025\.06\.02~29236be6-r1'/);
+  assert.match(metrics, /jarbis: 215040/);
+  assert.match(metrics, /'retro-arcade': 1394688/);
+  assert.match(metrics, /'network-usage-monitor': 117760/);
+  const makefile = readFileSync(resolve(root, '../../Makefile'), 'utf8');
+  const minimumSafeShield = makefile.match(/^LUCI_EXTRA_DEPENDS:=safeshield \(>=(\d+\.\d+\.\d+)\)$/m)?.[1];
+  const demoSafeShield = fixtures.match(/available: true, version: '(\d+\.\d+\.\d+)', enabled: true/)?.[1];
+  assert.ok(minimumSafeShield && demoSafeShield, 'SafeShield minimum and demo versions must be defined');
+  assert.ok(new Intl.Collator('en', { numeric: true }).compare(demoSafeShield, minimumSafeShield) >= 0,
+    'SafeShield demo should meet current minimum supported version');
+  assert.match(fixtures, /storage: demoAppsMetrics\.storage/,
+    'dashboard disk and Apps donut must share the same fictional storage');
+
+  const demo = readFileSync(resolve(root, 'demo/main.tsx'), 'utf8');
+  assert.match(demo, /installStatus=\{demoAppsStatus\} metrics=\{demoAppsMetrics\}/);
+  assert.match(demo, /onUpdate=\{async \(\) => \{ readonlyNotice\(\); \}\}/);
+});
+
+test('Apps 카테고리 아이콘은 공유기와 데모에서 동일하고 도구와 기타가 구분된다', () => {
+  const page = readFileSync(resolve(root, 'pages/AppsPage.tsx'), 'utf8');
+  const category = readFileSync(resolve(root, 'components/AppsCategoryIcon.tsx'), 'utf8');
+  const icons = readFileSync(resolve(root, 'components/Icons.tsx'), 'utf8');
+  const demo = readFileSync(resolve(root, 'demo/main.tsx'), 'utf8');
+  assert.match(demo, /<AppsPage data=\{demoApps\}/);
+  assert.match(page, /<AppsCategoryIcon category=\{tab\.id\}/);
+  const artwork = readFileSync(resolve(root, 'components/AppsArtwork.tsx'), 'utf8');
+  assert.match(page, /<AppsArtwork app=\{app\}/);
+  assert.match(artwork, /<AppsCategoryIcon category=\{appsCategoryOf\(app\.category\)\}/);
+  assert.match(page, /\{ id: 'utilities', label: '도구' \}/);
+  assert.match(page, /\{ id: 'other', label: '기타' \}/);
+  assert.match(category, /case 'utilities': return <WrenchIcon/);
+  assert.match(category, /case 'other': return <CircleEllipsisIcon/);
+  assert.match(category, /default: return 'other'/);
+  assert.match(category, /default: return <CircleEllipsisIcon/);
+  assert.match(icons, /export function WrenchIcon/);
+  assert.match(icons, /export function CircleEllipsisIcon/);
+  assert.match(icons, /export function NetworkNodesIcon/);
+  assert.doesNotMatch(category, /PowerIcon|PuzzleIcon/);
+});
+
+test('public demo actions never install APKs, pair an account, or open a live app', () => {
+  const demo = readFileSync(resolve(root, 'demo/main.tsx'), 'utf8');
+  const apps = readFileSync(resolve(root, 'pages/AppsPage.tsx'), 'utf8');
+  const account = readFileSync(resolve(root, 'pages/SmartSafeHubAccountPage.tsx'), 'utf8');
+  assert.match(demo, /onDemoAction=\{readonlyNotice\}/);
+  assert.match(demo, /onRequestPairing=\{async \(\) => \{ readonlyNotice\(\); return null; \}\}/);
+  for (const action of ['onInstall', 'onRemove', 'onUpdate']) {
+    assert.ok(demo.includes(`${action}={async () => { readonlyNotice(); }}`), `${action} must be a no-op`);
+  }
+  assert.match(apps, /if \(demo\) \{/);
+  assert.match(apps, /if \(action === 'remove'\) closeRemoveDialog\(\)/);
+  assert.match(apps, /onDemoAction\?\.\(\);/);
+  assert.match(apps, /launchPath \? \(demo \?/);
+  assert.match(apps, /onClick=\{onDemoAction\} type="button">열기/);
+  assert.match(account, /demo \? \(/);
+  assert.match(account, /onClick=\{onDemoAction\}/);
+  assert.match(account, /href=\{DEVICE_CONSOLE_URL\}/);
+  assert.doesNotMatch(demo, /import .*from ['"]\.\.\/api\//);
+});
+
+test('Network Watch 안내 문서와 데모 연결은 함께 유지된다', () => {
+  const routes = readFileSync(resolve(root, 'app/routes.ts'), 'utf8');
+  const app = readFileSync(resolve(root, 'demo/main.tsx'), 'utf8');
+  const sidebar = readFileSync(resolve(root, 'components/ProductNavigation.tsx'), 'utf8');
+  const fixtures = readFileSync(resolve(root, 'demo/data.ts'), 'utf8');
+  const docs = readFileSync(resolve(root, '../../docs/ROUTER_DEMO.md'), 'utf8');
+  assert.match(routes, /'netwatch'/);
+  assert.match(sidebar, /routes: \['safeshield', 'netwatch', 'rules'\]/);
+  assert.match(app, /case 'netwatch':/);
+  assert.match(app, /<NetworkWatchPage data=\{demoNetwatch\} devices=\{demoDevices\} activity=\{demoActivity\}/);
+  assert.match(fixtures, /export const demoNetwatch: NetwatchStatus = \{/);
+  assert.match(fixtures, /eventType: 'network_watch\.anomaly\.warning'/);
+  assert.match(docs, /Network Watch/);
+  assert.match(docs, /실제 네트워크를 관찰하거나 차단하지 않으며/);
+  assert.match(docs, /실제 설치 가능한 버전은 기기·채널별 Hub 승인 목록/);
+});
+
+
+test('Jarbis Demo는 실제 스마트홈 화면과 가상 Tasmota 데이터를 사용하며 모든 API 연결을 차단한다', () => {
+  const routes = readFileSync(resolve(root, 'app/routes.ts'), 'utf8');
+  const entry = readFileSync(resolve(root, 'demo/main.tsx'), 'utf8');
+  const page = readFileSync(resolve(root, 'pages/SmartHomePage.tsx'), 'utf8');
+  const ops = readFileSync(resolve(root, 'demo/jarbis.ts'), 'utf8');
+  const fixtures = readFileSync(resolve(root, 'demo/data.ts'), 'utf8');
+  const apps = readFileSync(resolve(root, 'pages/AppsPage.tsx'), 'utf8');
+  const docs = readFileSync(resolve(root, '../../docs/ROUTER_DEMO.md'), 'utf8');
+  assert.match(routes, /'netwatch', 'smarthome', 'rules'/);
+  assert.match(entry, /case 'smarthome':/);
+  assert.match(entry, /<SmartHomePage demo onDemoAction=\{readonlyNotice\} operations=\{demoJarbisOperations\}/);
+  assert.match(entry, /demoLightStates=\{demoJarbisLightStates\}/);
+  assert.doesNotMatch(page, /from ['"]\.\.\/api\//, 'shared smart-home page must not import live RPC');
+  assert.match(page, /if \(demo \|\| !status\?\.enabled/);
+  assert.match(page, /if \(demoAction\(\)\) return;/);
+  assert.match(page, /if \(demoAction\(\)\) return false;/);
+  assert.match(page, /!demo && status\?\.enabled && status\.brokerMode/);
+  assert.match(page, /disabled=\{controlsDisabled \|\| demo\}/);
+  assert.match(ops, /getJarbisCredentials: blocked/);
+  for (const method of ['scanJarbis', 'setJarbisEnabled', 'addJarbisDevice', 'updateJarbisDevice',
+    'removeJarbisDevice', 'pairJarbisDevice', 'setJarbisLight']) {
+    assert.ok(ops.includes(`${method}: blocked`), `${method} must be blocked in demo`);
+  }
+  for (const name of ['demoJarbisStatus', 'demoJarbisDevices', 'demoJarbisCandidates', 'demoJarbisLightStates']) {
+    assert.ok(fixtures.includes(`export const ${name}:`), `missing fixture ${name}`);
+  }
+  assert.match(fixtures, /192\.0\.2\.203/);
+  assert.match(apps, /href="#smarthome">스마트홈 체험<\/a>/);
+  assert.match(docs, /가상의 Tasmota 전구/);
+  assert.doesNotMatch(ops, /fetch\(|callApi|callRpc|\.\.\/api\//);
+});
+
+test('README links to the public router demo', () => {
+  const readme = readFileSync(resolve(root, '../../README.md'), 'utf8');
+  assert.match(readme, /https:\/\/www\.smartsafehub\.com\/router-demo\//);
+});

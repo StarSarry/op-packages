@@ -18,6 +18,29 @@ const callGetFirewallStatus = rpc.declare({ object: 'tailscale', method: 'get_fi
 let map;
 let lastDevicesStatus;
 
+// ui.addTimeLimitedNotification only exists since OpenWrt 24.10. Older
+// releases, 23.05 included, only have addNotification and would throw on every
+// call, so fade the notice out ourselves there.
+function notifyTimed(title, children, timeout, ...classes) {
+	if (typeof ui.addTimeLimitedNotification == 'function')
+		return ui.addTimeLimitedNotification(title, children, timeout, ...classes);
+
+	const msg = ui.addNotification(title, children, ...classes);
+
+	if (typeof timeout == 'number' && timeout > 0 && msg) {
+		window.setTimeout(function() {
+			msg.classList.add('fade-out');
+			msg.classList.remove('fade-in');
+			window.setTimeout(function() {
+				if (msg.parentNode)
+					msg.parentNode.removeChild(msg);
+			}, 250);
+		}, timeout);
+	}
+
+	return msg;
+}
+
 // uci.changes() returns an object keyed by config name; count the entries so
 // the firewall button can warn about unsaved work.
 function countPending(changes) {
@@ -50,7 +73,7 @@ function unwrapRpc(res, action) {
 }
 
 const tailscaleSettingsConf = [
-	[form.Flag, 'service_enabled', _('Enable Tailscale Service'), _('Enable or disable the Tailscale service. When disabled, the service will be stopped and the process will be killed.'), { rmempty: false }],
+	[form.Flag, 'service_enabled', _('Enable Tailscale Service'), _('Enable or disable the Tailscale service. Turning it off here stops the daemon and disables autostart; turning it back on starts it again.'), { rmempty: false }],
 	[form.ListValue, 'fw_mode', _('Firewall Mode'), _('Select the firewall backend for Tailscale to use. Requires service restart to take effect.'), {values: ['nftables','iptables'],rmempty: false}],
 	[form.Flag, 'accept_routes', _('Accept Routes'), _('Allow accepting routes announced by other nodes.'), { rmempty: false }],
 	[form.Flag, 'advertise_exit_node', _('Advertise Exit Node'), _('Declare this device as an Exit Node.'), { rmempty: false }],
@@ -111,6 +134,43 @@ function getRunningStatus() {
 	});
 }
 
+// Map.save() re-renders the form after every save, so registering the status
+// poller from s.render would add another 10 second get_status loop per save and
+// never remove the previous ones. The poller is therefore module level and
+// guarded by a flag; the flag is the only dedup mechanism on purpose, the
+// poller function reference is never compared.
+let statusPollerRegistered = false;
+
+function pollRunningStatus() {
+	return getRunningStatus().then(function (res) {
+		const view = document.getElementById("service_status_display");
+		if (view) {
+			const content = renderStatus(res);
+			view.replaceChildren(content);
+		}
+
+		lastDevicesStatus = res;
+		const devicesTbody = document.getElementById("tailscale_devices_tbody");
+		if (devicesTbody) {
+			const filterInput = document.getElementById("tailscale_devices_filter");
+			const currentQuery = filterInput ? filterInput.value : '';
+			devicesTbody.replaceChildren(...renderPeerRows(res, currentQuery));
+		}
+
+		// login button only available when logged out
+		const login_btn=document.getElementsByClassName('cbi-button cbi-button-apply')[0];
+		if(login_btn) { login_btn.disabled=(res.status != 'logout'); }
+	});
+}
+
+function ensureStatusPoller() {
+	if (statusPollerRegistered)
+		return;
+
+	statusPollerRegistered = true;
+	L.Poll.add(function () { return pollRunningStatus(); }, 10);
+}
+
 // Poll the background firewall job until it finishes. A poll that fails
 // (network reloading, the connection dropped for a moment) is expected and is
 // simply retried on the next tick instead of being reported as an error.
@@ -156,7 +216,7 @@ function pollFirewallJob(runId, timeoutSec) {
 
 				if (state === 'done') {
 					if (stop())
-						ui.addTimeLimitedNotification(null, [ E('p', _('Firewall configuration applied.')) ], 5000, 'info');
+						notifyTimed(null, [ E('p', _('Firewall configuration applied.')) ], 5000, 'info');
 					resolve(res);
 					return;
 				}
@@ -174,7 +234,7 @@ function pollFirewallJob(runId, timeoutSec) {
 				if (state !== lastState) {
 					lastState = state;
 					if (state === 'running' && res?.step === 'firewall')
-						ui.addTimeLimitedNotification(null, [ E('p', _('Reloading firewall...')) ], 3000, 'info');
+						notifyTimed(null, [ E('p', _('Reloading firewall...')) ], 3000, 'info');
 				}
 			});
 		}
@@ -242,7 +302,7 @@ async function initializeRegionMap() {
 			}
 		}
 	} catch (e) {
-		ui.addTimeLimitedNotification(null, [ E('p', _('Error reading cached DERP region map: %s').format(e.message || _('Unknown error'))) ], 7000, 'error');
+		notifyTimed(null, [ E('p', _('Error reading cached DERP region map: %s').format(e.message || _('Unknown error'))) ], 7000, 'error');
 	}
 
 	// If no valid cache, fetch from the network
@@ -269,10 +329,10 @@ async function initializeRegionMap() {
 			};
 			localStorage.setItem(cacheKey, JSON.stringify(itemToCache));
 		} catch (e) {
-			ui.addTimeLimitedNotification(null, [ E('p', _('Error caching DERP region map: %s').format(e.message || _('Unknown error'))) ], 7000, 'error');
+			notifyTimed(null, [ E('p', _('Error caching DERP region map: %s').format(e.message || _('Unknown error'))) ], 7000, 'error');
 		}
 	} catch (error) {
-		ui.addTimeLimitedNotification(null, [ E('p', _('Error fetching DERP region map: %s').format(error.message || _('Unknown error'))) ], 7000, 'error');
+		notifyTimed(null, [ E('p', _('Error fetching DERP region map: %s').format(error.message || _('Unknown error'))) ], 7000, 'error');
 	}
 }
 
@@ -369,7 +429,9 @@ function renderLogs(logs_data) {
 	}
 
 	const lines = logs_data.logs.map(function(line) {
-		return E('div', { 'style': 'white-space: pre; font-family: monospace; font-size: 13px; line-height: 1.5;' }, line);
+		// An array child becomes a text node, a bare string would be assigned
+		// to innerHTML and a log record containing markup would run as HTML.
+		return E('div', { 'style': 'white-space: pre; font-family: monospace; font-size: 13px; line-height: 1.5;' }, [ line ]);
 	});
 
 	return E('div', {
@@ -564,28 +626,8 @@ return view.extend({
 		s = map.section(form.NamedSection, '_status');
 		s.anonymous = true;
 		s.render = function (section_id) {
-			L.Poll.add(
-				function () {
-					return getRunningStatus().then(function (res) {
-						const view = document.getElementById("service_status_display");
-						if (view) {
-							const content = renderStatus(res);
-							view.replaceChildren(content);
-						}
-
-						lastDevicesStatus = res;
-						const devicesTbody = document.getElementById("tailscale_devices_tbody");
-						if (devicesTbody) {
-							const filterInput = document.getElementById("tailscale_devices_filter");
-							const currentQuery = filterInput ? filterInput.value : '';
-							devicesTbody.replaceChildren(...renderPeerRows(res, currentQuery));
-						}
-
-						// login button only available when logged out
-						const login_btn=document.getElementsByClassName('cbi-button cbi-button-apply')[0];
-						if(login_btn) { login_btn.disabled=(res.status != 'logout'); }
-					});
-				}, 10);
+			// Registering is idempotent and must not affect what is rendered.
+			ensureStatusPoller();
 
 			return E('div', { 'id': 'service_status_display', 'class': 'cbi-value' },
 				_('Collecting data ...')
@@ -643,7 +685,7 @@ return view.extend({
 
 		const fwBtn = s.taboption('general', form.Button, '_setup_firewall', _('Auto Configure Firewall'));
 		fwBtn.description = _('Essential configuration for Subnet Routing (Site-to-Site) and Exit Node features.')
-		+'<br>'+_('It creates the tailscale interface, adds it to a firewall zone, and sets up forwarding between LAN and Tailscale, plus Tailscale to WAN.')
+		+'<br>'+_('It binds the tailscale0 device to a firewall zone and sets up forwarding between LAN and Tailscale, plus Tailscale to WAN.')
 		+'<br>'+_('The Tailscale to WAN forwarding is what lets clients send their internet traffic through this device as an Exit Node.')
 		+'<br>'+_('Masquerading and MSS Clamping (MTU fix) are enabled to keep connections stable.');
 		fwBtn.inputstyle = 'action';
@@ -672,13 +714,23 @@ return view.extend({
 			return callSetupFirewall().then(function(res) {
 				unwrapRpc(res, _('Configuring firewall'));
 
-				if (!res.changed_network && !res.changed_firewall) {
+				if (res.job !== 'running') {
 					ui.addNotification(null, E('p', {}, _('Firewall configuration already applied.')), 'info');
 					return null;
 				}
 
-				ui.addTimeLimitedNotification(null, [ E('p', _('Configuration committed, reloading network and firewall. This can take a moment.')) ], 5000, 'info');
+				notifyTimed(null, [ E('p', _('Configuration committed, reloading firewall. This can take a moment.')) ], 5000, 'info');
 				return pollFirewallJob(res.run_id);
+			}).catch(function(err) {
+				// The reply itself can be the casualty of the reload it
+				// started, in which case the job is running fine and only the
+				// answer was lost. Ask the status endpoint before reporting a
+				// failure, so a dropped response does not read as an error.
+				return callGetFirewallStatus().then(function(st) {
+					if (st && st.run_id && (st.state === 'queued' || st.state === 'running'))
+						return pollFirewallJob(st.run_id);
+					throw err;
+				});
 			}).catch(function(err) {
 				ui.addNotification(null, E('p', {}, _('Failed to configure firewall: %s').format(err?.message || err?.error || err || _('Unknown error'))), 'error');
 			});
@@ -687,7 +739,7 @@ return view.extend({
 		const helpTitle = s.taboption('general', form.DummyValue, '_help_title');
 		helpTitle.title = _('How to enable Site-to-Site?');
 		helpTitle.render = function() {
-			return E('div', { 'class': 'cbi-value', 'style': 'margin-top: 1em; border-top: 1px font-weight: bold;' }, [
+			return E('div', { 'class': 'cbi-value', 'style': 'margin-top: 1em; border-top: 1px solid var(--border-color-medium, #ccc); font-weight: bold;' }, [
 				E('label', { 'class': 'cbi-value-title' }, this.title),
 				E('div', { 'class': 'cbi-value-field', 'style': 'line-height: 1.6em; font-size: 95%; color: #555;' }, [
 					_('1. Select "Accept Routes" (to access remote devices).'), E('br'),
@@ -705,7 +757,7 @@ return view.extend({
 		const exitHelp = s.taboption('general', form.DummyValue, '_exit_node_help');
 		exitHelp.title = _('How to enable Exit Node?');
 		exitHelp.render = function() {
-			return E('div', { 'class': 'cbi-value', 'style': 'margin-top: 1em; border-top: 1px font-weight: bold;' }, [
+			return E('div', { 'class': 'cbi-value', 'style': 'margin-top: 1em; border-top: 1px solid var(--border-color-medium, #ccc); font-weight: bold;' }, [
 				E('label', { 'class': 'cbi-value-title' }, this.title),
 				E('div', { 'class': 'cbi-value-field', 'style': 'line-height: 1.6em; font-size: 95%; color: #555;' }, [
 					_('1. Enable "Advertise Exit Node".'), E('br'),
@@ -744,6 +796,7 @@ return view.extend({
 			+'<br>'+_('If you are using custom login server but not providing an Auth Key, will redirect to the login page without pre-filling the key.')
 		);
 		customLoginAuthKey.placeholder = '';
+		customLoginAuthKey.password = true;
 		customLoginAuthKey.rmempty = true;
 
 		const logoutBtn = s.taboption('account', form.Button, '_logout', _('Logout'),
@@ -759,7 +812,7 @@ return view.extend({
 			const customServerAuth = customserverAuthInput ? customserverAuthInput.value : '';
 			const loginWindow = window.open('', '_blank');
 			if (!loginWindow) {
-				ui.addTimeLimitedNotification(null, [ E('p', _('Could not open a new tab. Please check if your browser or an extension blocked the pop-up.')) ], 10000, 'error');
+				notifyTimed(null, [ E('p', _('Could not open a new tab. Please check if your browser or an extension blocked the pop-up.')) ], 10000, 'error');
 				return;
 			}
 			// Display a prompt message in the new window
@@ -786,11 +839,11 @@ return view.extend({
 					doc.body.innerHTML =
 						'<h2>' + _('Error') + '</h2>' +
 						'<p>' + _('Failed to get login URL. You may close this tab.') + '</p>';
-					ui.addTimeLimitedNotification(null, [ E('p', _('Failed to get login URL: %s').format(res?.error || _('Invalid response from server.'))) ], 7000, 'error');
+					notifyTimed(null, [ E('p', _('Failed to get login URL: %s').format(res?.error || _('Invalid response from server.'))) ], 7000, 'error');
 				}
 			}).catch(function(err) {
 				ui.hideModal();
-				ui.addTimeLimitedNotification(null, [ E('p', _('Failed to get login URL: %s').format(err.message || _('Unknown error'))) ], 7000, 'error');
+				notifyTimed(null, [ E('p', _('Failed to get login URL: %s').format(err.message || _('Unknown error'))) ], 7000, 'error');
 			});
 		};
 
@@ -814,10 +867,10 @@ return view.extend({
 							return callDoLogout().then(function(res) {
 								unwrapRpc(res, _('Logout'));
 								ui.hideModal();
-								ui.addTimeLimitedNotification(null, [ E('p', _('Successfully logged out.')) ], 5000, 'info');
+								notifyTimed(null, [ E('p', _('Successfully logged out.')) ], 5000, 'info');
 							}).catch(function(err) {
 								ui.hideModal();
-								ui.addTimeLimitedNotification(null, [ E('p', _('Logout failed: %s').format(err.message || _('Unknown error'))) ], 7000, 'error');
+								notifyTimed(null, [ E('p', _('Logout failed: %s').format(err.message || _('Unknown error'))) ], 7000, 'error');
 							});
 						}
 					}, _('Logout'))
@@ -836,8 +889,10 @@ return view.extend({
 		s.tab('logs', _('Logs'));
 		const logsSection = s.taboption('logs', form.DummyValue, '_logs');
 		logsSection.render = function () {
+			// Logs are only fetched on Refresh, so the placeholder must not
+			// claim that nothing was found before anything was asked for.
 			const container = E('div', { 'id': 'tailscale_logs_display', 'class': 'cbi-value' },
-				_('No tailscale-related logs found.')
+				_('Click Refresh to load logs.')
 			);
 			return container;
 		};
@@ -872,13 +927,16 @@ return view.extend({
 	// standard OpenWrt apply mechanism, which triggers /etc/init.d/tailscale-settings
 	// and provides automatic rollback protection if the device becomes unreachable.
 	handleSaveApply(ev, mode) {
-		// Read the submitted value before map.save() consumes the staged delta.
-		// uci.get() prefers the staged change over the saved value, and the
-		// staged delta is only populated once the form has been parsed, which
-		// map.save() guarantees here.
-		const wantEnabled = uci.get('tailscale', 'settings', 'service_enabled');
+		// The submitted value only reaches the uci model while map.save() parses
+		// the form, so reading it before map.save() returns the previously saved
+		// value: switching the service off then passed '1' and never armed the
+		// stop request. Read it in the save callback, which runs right after the
+		// form was parsed and before the staged changes are sent to the device.
+		let wantEnabled;
 
-		return map.save().then(function () {
+		return map.save(function () {
+			wantEnabled = uci.get('tailscale', 'settings', 'service_enabled');
+		}).then(function () {
 			// Only records the disable request; the reload handler performs
 			// the stop after the commit, so a LuCI rollback still finds a
 			// running daemon. One concurrency slot on purpose: an overlapping
@@ -886,7 +944,10 @@ return view.extend({
 			// Fail-open on purpose: an install whose rpcd ACL cache predates
 			// this method would otherwise be unable to apply anything. The
 			// worst case is that the stop is skipped for this apply.
-			return callSetServiceEnabled({ enabled: wantEnabled === '0' ? '0' : '1' })
+			// The declaration maps positional arguments to its params, so pass
+			// the value itself: { enabled: ... } reached ubus as the value of
+			// enabled and was rejected as an invalid argument.
+			return callSetServiceEnabled(wantEnabled === '0' ? '0' : '1')
 				.catch(function(err) {
 					console.warn('set_service_enabled failed: %s', err);
 					return null;

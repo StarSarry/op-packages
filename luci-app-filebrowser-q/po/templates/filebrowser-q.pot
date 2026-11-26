@@ -1,0 +1,174 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Project-Id-Version: luci-app-filebrowser-q\n"
+"MIME-Version: 1.0\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "0.0.0.0 (All interfaces)"
+msgstr ""
+
+msgid "127.0.0.1 (Localhost only)"
+msgstr ""
+
+msgid ":: (IPv6 & dual-stack)"
+msgstr ""
+
+msgid "Additional directories"
+msgstr ""
+
+msgid "Admin password"
+msgstr ""
+
+msgid "Admin username"
+msgstr ""
+
+msgid "Authentication mode"
+msgstr ""
+
+msgid "Automatically allow incoming WAN TCP traffic to the listen port."
+msgstr ""
+
+msgid "Base URL path"
+msgstr ""
+
+msgid "Basic Settings"
+msgstr ""
+
+msgid "Cache directory"
+msgstr ""
+
+msgid "Cache max size (MB)"
+msgstr ""
+
+msgid "Changes here are saved only when \"Use custom YAML configuration\" is enabled."
+msgstr ""
+
+msgid "Choose 127.0.0.1 when running behind a local reverse proxy."
+msgstr ""
+
+msgid "Clear this field after initial login if you want password changes made in the Web UI to persist across restarts."
+msgstr ""
+
+msgid "Collecting data..."
+msgstr ""
+
+msgid "Configuration YAML (/etc/filebrowser-q/config.yaml)"
+msgstr ""
+
+msgid "Custom Config"
+msgstr ""
+
+msgid "Database file path"
+msgstr ""
+
+msgid "Default login username is %s and password is %s."
+msgstr ""
+
+msgid "Disable image, video, and document thumbnail generation to reduce CPU and RAM usage on low-end devices."
+msgstr ""
+
+msgid "Disable thumbnails"
+msgstr ""
+
+msgid "Enable"
+msgstr ""
+
+msgid "Enable HTTPS (TLS)"
+msgstr ""
+
+msgid "Enable when running behind Nginx, Caddy, or Lucky to honor X-Forwarded-* headers."
+msgstr ""
+
+msgid "FileBrowser Quantum"
+msgstr ""
+
+msgid "Filename \"database.db\" is reserved for v1 migration; use \"filebrowser.sqlite\" instead."
+msgstr ""
+
+msgid "Grant UCI and file access for luci-app-filebrowser-q"
+msgstr ""
+
+msgid "Invalid format. Use /path, /path:Name, or /path:Name:ro."
+msgstr ""
+
+msgid "Keep manual edits to /etc/filebrowser-q/config.yaml without overwriting from UCI options above (for OIDC, OnlyOffice, or advanced rules)."
+msgstr ""
+
+msgid "Listen address"
+msgstr ""
+
+msgid "Listen port"
+msgstr ""
+
+msgid "Maximum disk space used by thumbnail previews (0 = unlimited)."
+msgstr ""
+
+msgid "Modern self-hosted web file manager with multi-source storage, indexed search, WebDAV, and rich previews."
+msgstr ""
+
+msgid "Move to external storage (for example /mnt/sda1/filebrowser-q/filebrowser.sqlite) if router flash space is limited."
+msgstr ""
+
+msgid "NOT RUNNING"
+msgstr ""
+
+msgid "No authentication (Trusted LAN only)"
+msgstr ""
+
+msgid "No log entries found."
+msgstr ""
+
+msgid "Open Web Interface"
+msgstr ""
+
+msgid "Open firewall port"
+msgstr ""
+
+msgid "Optional extra storage sources. Format: /path, /path:Name, or /path:Name:ro (read-only)."
+msgstr ""
+
+msgid "Password authentication"
+msgstr ""
+
+msgid "Password cannot be \"admin\"; enter at least 5 characters."
+msgstr ""
+
+msgid "Password length must be at least 5 characters."
+msgstr ""
+
+msgid "Path must start with \"/\"."
+msgstr ""
+
+msgid "Primary storage path (for example / or /mnt/sda1)."
+msgstr ""
+
+msgid "RUNNING"
+msgstr ""
+
+msgid "Refresh Logs"
+msgstr ""
+
+msgid "Root directory"
+msgstr ""
+
+msgid "Service Logs"
+msgstr ""
+
+msgid "Stores thumbnails, search index, and archive temp files. Point to disk storage when downloading large folders."
+msgstr ""
+
+msgid "Subpath prefix when behind a reverse proxy (for example /files)."
+msgstr ""
+
+msgid "TLS certificate path"
+msgstr ""
+
+msgid "TLS private key path"
+msgstr ""
+
+msgid "Trust reverse-proxy headers"
+msgstr ""
+
+msgid "Use custom YAML configuration"
+msgstr ""

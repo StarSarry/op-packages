@@ -1,0 +1,364 @@
+<%
+local fs = require "nixio.fs"
+local uci = require("luci.model.uci").cursor()
+local autoupgrade_fm = "1"
+
+if not fs.access("/etc/config/ghfu") then
+    return
+end
+if fs.access("/etc/config/luci") then
+    autoupgrade_fm = uci:get("luci", "main", "autoupgrade_fm") or autoupgrade_fm
+end
+if autoupgrade_fm == "1" then
+-%>
+<style>
+    .ghfu-top-banner {
+        --ghfu-tb-bg:          linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+        --ghfu-tb-border:      #93c5fd;
+        --ghfu-tb-accent-bar:  #2563eb;
+        --ghfu-tb-text:        #1e293b;
+        --ghfu-tb-muted:       #475569;
+        --ghfu-tb-ver-bg:      #dcfce7;
+        --ghfu-tb-ver-text:    #15803d;
+        --ghfu-tb-ver-border:  #86efac;
+        --ghfu-tb-tag-bg:      #dbeafe;
+        --ghfu-tb-tag-text:    #1d4ed8;
+        --ghfu-tb-tag-border:  #93c5fd;
+        --ghfu-tb-beta-bg:     #fef3c7;
+        --ghfu-tb-beta-text:   #b45309;
+        --ghfu-tb-beta-border: #fcd34d;
+        --ghfu-tb-btn-bg:      #2563eb;
+        --ghfu-tb-btn-hover:   #1d4ed8;
+        --ghfu-tb-btn-text:    #ffffff;
+        --ghfu-tb-close-color: #64748b;
+        --ghfu-tb-close-hover: rgba(15, 23, 42, 0.08);
+        --ghfu-tb-close-htext: #0f172a;
+        --ghfu-tb-shadow:      0 2px 8px rgba(15, 23, 42, 0.07), 0 1px 2px rgba(15, 23, 42, 0.04);
+
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        width: 100%;
+        box-sizing: border-box;
+        margin: 0 0 10px 0;
+        padding: 10px 14px;
+        border-radius: 10px;
+        border: 1px solid var(--ghfu-tb-border);
+        border-left: 4px solid var(--ghfu-tb-accent-bar);
+        background: var(--ghfu-tb-bg);
+        color: var(--ghfu-tb-text);
+        box-shadow: var(--ghfu-tb-shadow);
+        font-size: 13px;
+        line-height: 1.5;
+        position: relative;
+        z-index: 20;
+        transition: opacity 0.18s ease, transform 0.18s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    .ghfu-top-banner[data-ghfu-dark="1"] {
+        --ghfu-tb-bg:          linear-gradient(135deg, #1e293b 0%, #17253b 100%);
+        --ghfu-tb-border:      #3b82f6;
+        --ghfu-tb-accent-bar:  #60a5fa;
+        --ghfu-tb-text:        #e2e8f0;
+        --ghfu-tb-muted:       #94a3b8;
+        --ghfu-tb-ver-bg:      rgba(34, 197, 94, 0.18);
+        --ghfu-tb-ver-text:    #4ade80;
+        --ghfu-tb-ver-border:  rgba(74, 222, 128, 0.38);
+        --ghfu-tb-tag-bg:      rgba(59, 130, 246, 0.20);
+        --ghfu-tb-tag-text:    #93c5fd;
+        --ghfu-tb-tag-border:  rgba(96, 165, 250, 0.40);
+        --ghfu-tb-beta-bg:     rgba(217, 119, 6, 0.22);
+        --ghfu-tb-beta-text:   #fbbf24;
+        --ghfu-tb-beta-border: rgba(251, 191, 36, 0.42);
+        --ghfu-tb-btn-bg:      #3b82f6;
+        --ghfu-tb-btn-hover:   #2563eb;
+        --ghfu-tb-btn-text:    #ffffff;
+        --ghfu-tb-close-color: #94a3b8;
+        --ghfu-tb-close-hover: rgba(255, 255, 255, 0.10);
+        --ghfu-tb-close-htext: #f8fafc;
+        --ghfu-tb-shadow:      0 4px 14px rgba(0, 0, 0, 0.38);
+    }
+
+    .ghfu-top-banner.ghfu-top-banner-closing {
+        opacity: 0;
+        transform: translateY(-6px);
+        pointer-events: none;
+    }
+
+    .ghfu-top-banner-main {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px 10px;
+        flex: 1 1 auto;
+        min-width: 0;
+        text-decoration: none !important;
+        color: inherit !important;
+        cursor: pointer;
+    }
+
+    .ghfu-top-banner-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #22c55e;
+        box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.22);
+        flex-shrink: 0;
+    }
+
+    .ghfu-top-banner-title {
+        font-weight: 700;
+        color: var(--ghfu-tb-text);
+        white-space: nowrap;
+    }
+
+    .ghfu-top-banner-ver {
+        display: inline-flex;
+        align-items: center;
+        padding: 1px 9px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 700;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        background: var(--ghfu-tb-ver-bg);
+        color: var(--ghfu-tb-ver-text);
+        border: 1px solid var(--ghfu-tb-ver-border);
+    }
+
+    .ghfu-top-banner-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 1px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-weight: 600;
+        background: var(--ghfu-tb-tag-bg);
+        color: var(--ghfu-tb-tag-text);
+        border: 1px solid var(--ghfu-tb-tag-border);
+    }
+
+    .ghfu-top-banner-badge.is-beta {
+        background: var(--ghfu-tb-beta-bg);
+        color: var(--ghfu-tb-beta-text);
+        border-color: var(--ghfu-tb-beta-border);
+    }
+
+    .ghfu-top-banner-cur {
+        font-size: 12px;
+        color: var(--ghfu-tb-muted);
+    }
+
+    .ghfu-top-banner-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+    }
+
+    .ghfu-top-banner-go {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        background: var(--ghfu-tb-btn-bg);
+        color: var(--ghfu-tb-btn-text) !important;
+        text-decoration: none !important;
+        transition: background 0.15s ease;
+        white-space: nowrap;
+    }
+
+    .ghfu-top-banner-go:hover {
+        background: var(--ghfu-tb-btn-hover);
+    }
+
+    .ghfu-top-banner-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        margin: 0;
+        border: none;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--ghfu-tb-close-color);
+        font-size: 15px;
+        line-height: 1;
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease;
+    }
+
+    .ghfu-top-banner-close:hover {
+        background: var(--ghfu-tb-close-hover);
+        color: var(--ghfu-tb-close-htext);
+    }
+</style>
+<script type="text/javascript">
+(function() {
+    var checkUrl = '<%=url([[admin]], [[system]], [[ghfu]], [[sysversion_check]])%>';
+    var upgradeUrl = '<%=url([[admin]], [[system]], [[ghfu]])%>';
+    var DISMISS_KEY = 'ghfu_dismissed_ver';
+    var CACHE_KEY = 'ghfu_sysver_cache';
+    var CACHE_TTL_MS = 300000;
+
+    var I18N = {
+        newVerAvailable: '<%:New version available%>',
+        formalRelease: '<%:Formal Release%>',
+        previewRelease: '<%:Preview Release%>',
+        curSysVer: '<%:Current system version%>',
+        upgradeNow: '<%:Upgrade Now%>',
+        closeBtn: '<%:Close%>'
+    };
+
+    function escHtml(s) {
+        return String(s || '').replace(/[&<>"']/g, function(c) {
+            return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
+        });
+    }
+
+    function detectDarkTheme() {
+        var html = document.documentElement;
+        var body = document.body;
+        var dm = (html && html.getAttribute('data-darkmode')) || (body && body.getAttribute('data-darkmode'));
+        if (dm === 'true') return true;
+        if (dm === 'false') return false;
+
+        var attrNames = ['data-theme', 'data-bs-theme', 'data-color-scheme', 'data-argon-mode'];
+        for (var a = 0; a < attrNames.length; a++) {
+            var val = ((body && body.getAttribute(attrNames[a])) || (html && html.getAttribute(attrNames[a])) || '').toLowerCase();
+            if (/dark|black|night/.test(val)) return true;
+            if (/light|white|day/.test(val)) return false;
+        }
+
+        var darkClasses = ['dark', 'is-dark', 'night', 'dark-mode', 'theme-dark', 'luci-dark'];
+        var lightClasses = ['light', 'is-light', 'day', 'light-mode', 'theme-light', 'luci-light'];
+        for (var i = 0; i < darkClasses.length; i++) {
+            if ((body && body.classList.contains(darkClasses[i])) || (html && html.classList.contains(darkClasses[i]))) return true;
+        }
+        for (var j = 0; j < lightClasses.length; j++) {
+            if ((body && body.classList.contains(lightClasses[j])) || (html && html.classList.contains(lightClasses[j]))) return false;
+        }
+
+        var targets = [document.querySelector('#maincontent'), document.querySelector('.main-right'), document.querySelector('main'), body, html];
+        for (var k = 0; k < targets.length; k++) {
+            var el = targets[k];
+            if (!el) continue;
+            try {
+                var m = (window.getComputedStyle(el).backgroundColor || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+                if (m && (m[4] === undefined || parseFloat(m[4]) > 0.15)) {
+                    return ((0.299 * +m[1] + 0.587 * +m[2] + 0.114 * +m[3]) / 255) < 0.45;
+                }
+            } catch (e) {}
+        }
+        return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    }
+
+    function syncBannerTheme(banner) {
+        if (!banner) return;
+        if (detectDarkTheme()) {
+            banner.setAttribute('data-ghfu-dark', '1');
+        } else {
+            banner.removeAttribute('data-ghfu-dark');
+        }
+    }
+
+    function isDismissed(ver) {
+        try { return sessionStorage.getItem(DISMISS_KEY) === String(ver || ''); } catch (e) { return false; }
+    }
+
+    function mountTopBanner(json) {
+        if (!json || !json.notice || !json.version || isDismissed(json.version)) return;
+
+        var existing = document.getElementById('ghfu_sysupgrade_top_banner');
+        if (existing) existing.remove();
+
+        var container = document.querySelector('#maincontent') ||
+                        document.querySelector('.main-right') ||
+                        document.querySelector('main') ||
+                        document.body;
+        if (!container) return;
+
+        var banner = document.createElement('div');
+        banner.id = 'ghfu_sysupgrade_top_banner';
+        banner.className = 'ghfu-top-banner';
+        syncBannerTheme(banner);
+
+        var isFormal = json.is_formal !== false;
+        var badgeCls = 'ghfu-top-banner-badge' + (isFormal ? '' : ' is-beta');
+        var badgeLabel = isFormal ? I18N.formalRelease : I18N.previewRelease;
+        var curVerHtml = json.now_version
+            ? '<span class="ghfu-top-banner-cur">(' + escHtml(I18N.curSysVer) + ': ' + escHtml(json.now_version) + ')</span>'
+            : '';
+
+        banner.innerHTML =
+            '<a class="ghfu-top-banner-main" href="' + escHtml(upgradeUrl) + '">' +
+                '<span class="ghfu-top-banner-dot"></span>' +
+                '<span class="ghfu-top-banner-title">' + escHtml(I18N.newVerAvailable) + '</span>' +
+                '<span class="ghfu-top-banner-ver">' + escHtml(json.version) + '</span>' +
+                '<span class="' + badgeCls + '">' + escHtml(badgeLabel) + '</span>' +
+                curVerHtml +
+            '</a>' +
+            '<div class="ghfu-top-banner-actions">' +
+                '<a class="ghfu-top-banner-go" href="' + escHtml(upgradeUrl) + '">' + escHtml(I18N.upgradeNow) + ' &rarr;</a>' +
+                '<button type="button" class="ghfu-top-banner-close" id="ghfu_top_banner_close" title="' + escHtml(I18N.closeBtn) + '" aria-label="' + escHtml(I18N.closeBtn) + '">&#10005;</button>' +
+            '</div>';
+
+        container.insertBefore(banner, container.firstChild);
+
+        var closeBtn = banner.querySelector('#ghfu_top_banner_close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                try { sessionStorage.setItem(DISMISS_KEY, String(json.version)); } catch (err) {}
+                banner.classList.add('ghfu-top-banner-closing');
+                setTimeout(function() {
+                    if (banner.parentNode) banner.parentNode.removeChild(banner);
+                }, 180);
+            });
+        }
+
+        if (window.MutationObserver) {
+            var filter = ['class', 'style', 'data-darkmode', 'data-theme', 'data-bs-theme', 'data-color-scheme', 'data-argon-mode'];
+            var obs = new MutationObserver(function() { syncBannerTheme(banner); });
+            if (document.documentElement) obs.observe(document.documentElement, { attributes: true, attributeFilter: filter });
+            if (document.body) obs.observe(document.body, { attributes: true, attributeFilter: filter });
+        }
+        if (window.matchMedia) {
+            var mq = window.matchMedia('(prefers-color-scheme: dark)');
+            if (mq.addEventListener) mq.addEventListener('change', function() { syncBannerTheme(banner); });
+        }
+    }
+
+    try {
+        var rawCache = sessionStorage.getItem(CACHE_KEY);
+        if (rawCache) {
+            var parsed = JSON.parse(rawCache);
+            if (parsed && parsed.ts && (Date.now() - parsed.ts < CACHE_TTL_MS) && parsed.data) {
+                if (parsed.data.code === 0 && parsed.data.notice && parsed.data.version) {
+                    mountTopBanner(parsed.data);
+                }
+                return;
+            }
+        }
+    } catch (e) {}
+
+    fetch(checkUrl, { method: 'GET', credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(json) {
+            if (json && json.code === 0) {
+                try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data: json })); } catch (e) {}
+                if (json.notice && json.version) {
+                    mountTopBanner(json);
+                }
+            }
+        })
+        .catch(function() {});
+})();
+</script>
+<% end -%>

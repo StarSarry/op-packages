@@ -24,7 +24,10 @@
 	--fs-xl: 20px;
 	--fs-2xl: 24px;
 
+	/* spacing: steps of 4px, with 2px and 6px for tight insides */
+	--sp-0-5: 2px;
 	--sp-1: 4px;
+	--sp-1-5: 6px;
 	--sp-2: 8px;
 	--sp-3: 12px;
 	--sp-4: 16px;
@@ -32,9 +35,19 @@
 	--sp-6: 24px;
 	--sp-8: 32px;
 
+	/* font weights: four steps only (static fonts draw 620-680 as bold) */
+	--fw-regular: 400;
+	--fw-medium: 500;
+	--fw-semibold: 600;
+	--fw-bold: 700;
+
+	/* radii: bars, small controls, controls, cards, large icon tiles
+	   (pills are 999px, dots 50%) */
+	--r-xs: 2px;
 	--r-sm: 4px;
 	--r: 6px;
 	--r-lg: 8px;
+	--r-xl: 12px;
 
 	--rail-w: 56px;
 	--rail-w-pinned: 204px;
@@ -42,7 +55,11 @@
 	--ctl-h: 36px;              /* every control: inputs, selects, buttons, tabs, chips */
 	--label-w: 180px;           /* form label column */
 	--field-max: 360px;         /* widest single-line field */
-	--content-max: 1320px;
+	--content-max: 1320px;      /* content column, on windows up to ~1920px */
+	--content-wide: 2400px;     /* wider windows: the column grows to this */
+	/* the column's width with its padding: grows with the window past
+	   1920px, ~200px clear each side, so 2K and 4K screens at 100% fill */
+	--main-max: clamp(calc(var(--content-max) + 2 * var(--sp-6)), 100% - 400px, calc(var(--content-wide) + 2 * var(--sp-6)));
 
 	/* light: cool paper grey, olive accent text */
 	--bg: #e9ecef;
@@ -70,6 +87,7 @@
 	--err: #c42b2b;
 	--err-soft: rgba(196, 43, 43, .1);
 	--err-ink: #ffffff;         /* text on an --err / --info fill, >= 4.5:1 */
+	--warn-ink: #ffffff;        /* text on a --warn fill (counts, warning tooltips); #1a1200 was 3.4:1 */
 	--info: #1c64c4;
 	--info-ink: #ffffff;
 	--ok-text: #0a7262;         /* --ok as text on control fills (s3, s4) */
@@ -82,9 +100,9 @@
 	--scrim: rgba(20, 23, 26, .38);
 	--shadow-pop: 0 12px 32px rgba(20, 23, 26, .16), 0 2px 6px rgba(20, 23, 26, .08);
 	--zone-mix: .22;
-	--seg-bg: var(--s3);        /* segmented control: track, selected segment */
+	--seg-bg: var(--s3);        /* segmented control: track, selected segment and its ring */
 	--seg-on: var(--s2);
-	--seg-on-ring: inset 0 0 0 1px var(--line);   /* inset: drawn at the segment's padding edge */
+	--seg-on-ring: inset 0 0 0 1px var(--accent-line);   /* inset: drawn at the segment's padding edge */
 }
 
 html[data-darkmode="true"] {
@@ -116,6 +134,7 @@ html[data-darkmode="true"] {
 	--err: #ff6b6b;
 	--err-soft: rgba(255, 107, 107, .12);
 	--err-ink: #1a0505;         /* white on the light dark-mode red was 2.8:1 */
+	--warn-ink: #1a1200;
 	--info: #6cb4ff;
 	--info-ink: #0d0e10;
 	--ok-text: var(--ok);
@@ -128,7 +147,6 @@ html[data-darkmode="true"] {
 	--zone-mix: .2;
 	--seg-bg: var(--bg);
 	--seg-on: var(--s3);
-	--seg-on-ring: inset 0 0 0 1px var(--line-2);
 }
 
 /* touch: controls are sized by the pointer, not the screen width */
@@ -153,6 +171,14 @@ html[data-darkmode="true"] {
 	--v-accent: var(--accent-text);      /* olive: lime is unreadable on light */
 	--v-accent-ink: #ffffff;
 	--v-accent-soft: var(--accent-soft);
+	/* the accent by role, as the theme's own controls use it: text and
+	   icons; borders, rings and selection bars; the lime fill of primary
+	   buttons and pressed picks with its ink */
+	--v-accent-text: var(--accent-text);
+	--v-accent-line: var(--accent-line);
+	--v-accent-fill: var(--accent);
+	--v-accent-fill-hover: var(--accent-hover);
+	--v-accent-fill-ink: var(--accent-ink);
 	--v-ok: var(--ok);
 	--v-ok-soft: var(--ok-soft);
 	--v-warn: var(--warn);
@@ -161,6 +187,34 @@ html[data-darkmode="true"] {
 	--v-err-soft: var(--err-soft);
 	--v-info: var(--info);
 	--v-info-soft: var(--info-soft);
+	/* status colours as text on their soft fill, >= 4.5:1 on a hovered row too */
+	--v-ok-text: var(--ok-text);
+	--v-warn-text: var(--warn-text);
+	--v-err-text: var(--err-text);
+	--v-info-text: var(--info-text);
+	--v-focus: var(--focus);             /* a focused field: border plus a 1px ring of it */
+	--v-scrim: var(--scrim);             /* under dialogs, drawers and sheets */
+	--v-seg-bg: var(--seg-bg);           /* segmented control: track, selected segment, its ring */
+	--v-seg-on: var(--seg-on);
+	--v-seg-on-ring: var(--seg-on-ring);
+	--v-hover: color-mix(in srgb, var(--s3) 55%, transparent);   /* a hovered row on a card */
+	--v-surface-4: var(--s4);            /* a hovered item in a menu (menus are --v-surface-2) */
+	--v-meter: var(--info);              /* memory and storage bars: blue (lime is download) */
+	--v-card-px: var(--card-px);         /* card insides: 20 / 16px, 14px on phones */
+	--v-card-py: var(--card-py);
+	--v-sp-0-5: var(--sp-0-5);           /* spacing: 2 4 6 8 12 16 20 24 32 px */
+	--v-sp-1: var(--sp-1);
+	--v-sp-1-5: var(--sp-1-5);
+	--v-sp-2: var(--sp-2);
+	--v-sp-3: var(--sp-3);
+	--v-sp-4: var(--sp-4);
+	--v-sp-5: var(--sp-5);
+	--v-sp-6: var(--sp-6);
+	--v-sp-8: var(--sp-8);
+	--v-fw-regular: var(--fw-regular);   /* weights: 400 500 600 700 */
+	--v-fw-medium: var(--fw-medium);
+	--v-fw-semibold: var(--fw-semibold);
+	--v-fw-bold: var(--fw-bold);
 	--v-font: var(--font);
 	--v-mono: var(--mono);
 	--v-fs-micro: var(--fs-micro);       /* the type scale: 10.5 12 13 14 16 20 24 px */
@@ -170,12 +224,18 @@ html[data-darkmode="true"] {
 	--v-fs-lg: var(--fs-lg);
 	--v-fs-xl: var(--fs-xl);
 	--v-fs-2xl: var(--fs-2xl);
+	--v-r-xs: var(--r-xs);               /* radii: 2 4 6 8 12 px */
 	--v-r-sm: var(--r-sm);
 	--v-r: var(--r);
 	--v-r-lg: var(--r-lg);
+	--v-r-xl: var(--r-xl);
 	--v-ctl-h: var(--ctl-h);             /* every control: 36px, 44px on touch */
 	--v-shadow: 0 1px 2px rgba(20, 23, 26, .06), 0 1px 0 rgba(20, 23, 26, .03);
+	--v-shadow-raise: 0 6px 16px rgba(20, 23, 26, .08);   /* a card lifted under the pointer */
 	--v-shadow-pop: var(--shadow-pop);   /* lists and menus that open over the page */
+	/* the dashboard's drawer and its scrim: over the rail and the top bar
+	   (300), under modals (1000) and menus (1100) */
+	--v-z-drawer: 890;
 	/* where sticky content may start: below the top bar (page tabs scroll) */
 	--v-stick-top: var(--stick-top);
 
@@ -199,6 +259,7 @@ html[data-darkmode="true"] {
 	--v-accent: var(--accent);           /* lime signal */
 	--v-accent-ink: var(--accent-ink);
 	--v-shadow: 0 1px 0 rgba(0, 0, 0, .35);
+	--v-shadow-raise: 0 6px 16px rgba(0, 0, 0, .4);
 
 	--v-chart-1: #c8f031;
 	--v-chart-2: #3f8fe8;
@@ -336,11 +397,15 @@ html[data-darkmode="true"] .vt-brand-tile { fill: #16181b; }
 	text-decoration: none !important;
 }
 .vt-brand svg { flex: none; }
-.vt-brand-word {
-	font-weight: 650; font-size: var(--fs-md); letter-spacing: .02em;
-	white-space: nowrap; overflow: hidden;
-	display: none;
-}
+/* Appearance "Next to the logo" (menu-vantage.js applyBrand): beside the
+   logo while the rail is pinned open, else first in the top bar, as
+   "name / page"; not on phones, where the logo isn't shown either */
+.vt-brand-name { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+html[data-rail="pinned"] .vt-brand-name:not([hidden]) { display: block; }
+.vt-top-name { flex: none; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-weight: 600; }
+.vt-top-name[hidden], html[data-rail="pinned"] .vt-top-name { display: none; }
+.vt-top-name + .vt-crumbs::before { content: "/"; flex: none; margin-inline-end: 4px; color: var(--text-3); font-family: var(--mono); font-size: var(--fs-sm); }
+.vt-top-name[hidden] + .vt-crumbs::before, html[data-rail="pinned"] .vt-top-name + .vt-crumbs::before { content: none; }
 
 .vt-rail-list {
 	list-style: none; margin: 0; padding: var(--sp-2) 0;
@@ -395,7 +460,6 @@ html[data-darkmode="true"] .vt-brand-tile { fill: #16181b; }
 
 /* pinned rail: labels + inline accordion instead of flyouts */
 html[data-rail="pinned"] .vt-rail { width: var(--rail-w-pinned); }
-html[data-rail="pinned"] .vt-brand-word,
 html[data-rail="pinned"] .vt-rail-label { display: block; }
 html[data-rail="pinned"] .vt-rail-caret { display: block; }
 html[data-rail="pinned"] .vt-rail-item.is-expanded > .vt-rail-link .vt-rail-caret { transform: rotate(90deg); }
@@ -436,9 +500,7 @@ html[data-rail="pinned"] .vt-frame { margin-left: var(--rail-w-pinned); }
 	border-bottom: 1px solid var(--line);
 	flex: none;
 }
-.vt-fly-head svg { width: 18px; height: 18px; color: var(--accent-text); }
 .vt-fly-title { font-size: var(--fs-md); font-weight: 600; }
-.vt-fly-count { margin-left: auto; font: var(--fs-micro)/1 var(--mono); color: var(--text-3); letter-spacing: .04em; }
 
 .vt-fly-list { list-style: none; margin: 0; padding: var(--sp-2); overflow-y: auto; flex: 1 1 auto; }
 .vt-fly-list > li + li { margin-top: 1px; }
@@ -451,7 +513,6 @@ html[data-rail="pinned"] .vt-frame { margin-left: var(--rail-w-pinned); }
 }
 .vt-fly-link:hover { background: var(--s3); }
 .vt-fly-link[aria-current] { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
-.vt-fly-link .vt-fly-meta { margin-left: auto; font: var(--fs-micro)/1 var(--mono); color: var(--text-3); }
 .vt-fly-sub { list-style: none; margin: 0 0 var(--sp-1) 18px; padding: 0; border-left: 1px solid var(--line-2); }
 .vt-fly-sub a {
 	display: block; padding: 4px 10px;
@@ -461,11 +522,6 @@ html[data-rail="pinned"] .vt-frame { margin-left: var(--rail-w-pinned); }
 }
 .vt-fly-sub a:hover { color: var(--text); background: var(--s3); }
 .vt-fly-sub a[aria-current] { color: var(--accent-text); font-weight: 600; box-shadow: inset 2px 0 0 var(--accent-text); }
-.vt-fly-foot {
-	flex: none; padding: var(--sp-2) var(--sp-4);
-	border-top: 1px solid var(--line);
-	color: var(--text-3); font-size: var(--fs-micro); letter-spacing: .06em; text-transform: uppercase;
-}
 
 .vt-scrim { position: fixed; inset: 0; z-index: 280; background: var(--scrim); }
 
@@ -516,7 +572,7 @@ a.vt-crumb:hover { color: var(--text); }
 .vt-crumb-switch > svg { flex: none; width: 14px; height: 14px; color: var(--text-3); transition: transform .15s; }
 .vt-crumb-switch:hover, .vt-crumb-switch[aria-expanded="true"] { background: var(--s3); }
 .vt-crumb-switch:focus-visible { outline-offset: 0; }
-.vt-crumb-switch[aria-expanded="true"] > svg { transform: rotate(90deg); }
+.vt-crumb-switch[aria-expanded="true"] > svg { transform: rotate(180deg); }
 @media (width > 720px) {
 	/* the flyout as a dropdown under the crumb (left: set from the crumb) */
 	.vt-flyout.is-switch {
@@ -565,7 +621,67 @@ a.vt-crumb:hover { color: var(--text); }
 	text-decoration: none !important;
 }
 .vt-icon-btn:hover { background: var(--s3); color: var(--text); border-color: var(--line); }
-.vt-icon-btn .vt-fill, .vt-pal .vt-fill { fill: currentColor; stroke: none; }
+.vt-icon-btn .vt-fill, .vt-pal .vt-fill, .vt-appearance .vt-fill { fill: currentColor; stroke: none; }
+.vt-icon-btn[aria-expanded="true"] { background: var(--s3); color: var(--text); border-color: var(--line); }
+/* the daily check knows of a newer version (menu-vantage.js applyUpdate):
+   a still dot at the gear's corner, the indicators' size, in the notice
+   colour, ringed in what is behind it */
+#vt-look[data-vt-update] { position: relative; }
+#vt-look[data-vt-update]::after {
+	content: ""; position: absolute; left: calc(50% + 5px); top: calc(50% - 12px);
+	width: 7px; height: 7px; border-radius: 50%;
+	background: var(--info); box-shadow: 0 0 0 2px var(--bg);
+	pointer-events: none;
+}
+#vt-look[data-vt-update]:is(:hover, [aria-expanded="true"])::after { box-shadow: 0 0 0 2px var(--s3); }
+
+/* Appearance (menu-vantage.js), under the gear button: each
+   setting a native radio group drawn as segments, like the page tabs */
+.vt-appearance {
+	position: fixed; z-index: 1100;
+	display: flex; flex-direction: column; gap: var(--sp-4);
+	width: max-content; max-width: calc(100vw - 16px); padding: var(--sp-4);
+	overflow-y: auto; overscroll-behavior: contain;
+	border: 1px solid var(--line-2); border-radius: var(--r-lg);
+	background: var(--s2); box-shadow: var(--shadow-pop);
+}
+.vt-appearance[hidden] { display: none; }
+.vt-appear-set { min-width: 0; margin: 0; padding: 0; border: 0; }
+/* where the picks are kept, when not for every browser */
+.vt-appear-note { max-width: 32ch; margin: 0; color: var(--text-3); font-size: var(--fs-sm); line-height: 1.4; }
+.vt-appear-note[hidden] { display: none; }
+/* the daily check's line of help, under its options */
+.vt-appear-set > .vt-appear-note { margin-top: 6px; }
+.vt-appear-ver { margin: 0; color: var(--text-3); font-size: var(--fs-micro); display:none; }
+.vt-appear-num { font-family: var(--mono); }
+.vt-appear-check { margin: 0; padding: 0; border: 0; background: none; color: var(--accent-text); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.vt-appear-check[aria-disabled="true"] { color: var(--text-3); cursor: default; text-decoration: none; }
+.vt-appear-update { display: block; margin-top: 4px; color: var(--text-2); }
+.vt-appear-update[hidden] { display: none; }
+.vt-appear-set > legend { margin: 0 0 6px; padding: 0; color: var(--text-3); font-size: var(--fs-micro); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.vt-appear-track {
+	/* every option one column of the same width, the widest label's: the
+	   panel is as wide as the row that needs most */
+	display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+	background: var(--seg-bg); border-radius: var(--r-lg); box-shadow: inset 0 0 0 1px var(--line);
+}
+.vt-appear-opt {
+	position: relative;
+	display: flex; align-items: center; justify-content: center; gap: 6px;
+	min-height: var(--ctl-h); padding: 0 6px;
+	border: 3px solid transparent; background-clip: padding-box;
+	border-radius: calc(var(--r) + 3px);
+	color: var(--text-2); font-weight: 500; white-space: nowrap;
+	cursor: pointer;
+}
+/* each label as wide as it is bold, picked: a pick changes no width */
+.vt-appear-opt > span { display: inline-flex; flex-direction: column; align-items: center; }
+.vt-appear-opt > span::after { content: attr(data-text) / ""; height: 0; overflow: hidden; visibility: hidden; font-weight: 600; pointer-events: none; user-select: none; }
+.vt-appear-opt:hover { color: var(--text); }
+.vt-appear-opt > input { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
+.vt-appear-opt:has(> input:checked) { background-color: var(--seg-on); color: var(--accent-text); font-weight: 600; box-shadow: var(--seg-on-ring); }
+.vt-appear-opt:has(> input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -1px; }
+.vt-appear-opt svg { flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
 .vt-host {
 	display: inline-flex; align-items: center; gap: 6px;
@@ -577,8 +693,11 @@ a.vt-crumb:hover { color: var(--text); }
 	color: var(--text-2);
 	font-size: var(--fs-sm);
 	white-space: nowrap;
+	text-decoration: none !important;
 }
-.vt-host b { color: var(--text); font-weight: 600; font-family: var(--mono); font-size: var(--fs-micro); }
+/* a link to Status → Overview (header.ut), drawn like the icon buttons */
+.vt-host:hover { background: var(--s3); border-color: var(--line-2); }
+.vt-host b { color: var(--text); font-weight: 600; }
 .vt-host span { overflow: hidden; text-overflow: ellipsis; }
 .vt-host-sep { color: var(--text-3); }
 
@@ -596,30 +715,45 @@ a.vt-crumb:hover { color: var(--text); }
 }
 #indicators > span[data-clickable] { cursor: pointer; }
 #indicators > span[data-clickable]:hover { border-color: var(--text-3); color: var(--text); }
+/* auto-refresh on: a dot with a slow, soft ring (#100); fast while the
+   dashboard reports a problem: amber while it reconnects or warns, red for
+   an error (luci-app-vantage sets html[data-vt-live] and [data-vt-alert]);
+   paused: a still square. The ring scales and fades on the compositor,
+   behind the dot (z-index -1 in the pill's own stack), and is transparent
+   unless it runs, so reduced motion shows none. */
 #indicators > span[data-indicator="poll-status"][data-style="active"] { position: relative; isolation: isolate; }
 #indicators > span[data-indicator="poll-status"][data-style="active"]::before {
 	content: ""; width: 7px; height: 7px; border-radius: 50%;
-	background: var(--accent-text);
+	background: var(--ok);
 }
-/* the pulse is a ring of its own that scales and fades: the compositor
-   runs it, where an animated box-shadow repainted the page every frame.
-   It sits behind the dot (z-index -1 in the pill's isolated stack), so
-   the dot never lightens, and is invisible unless animated: with reduced
-   motion the one near-instant run ends on opacity 0. */
 #indicators > span[data-indicator="poll-status"][data-style="active"]::after {
 	content: ""; position: absolute; z-index: -1; left: 10px; top: calc(50% - 3.5px);
 	width: 7px; height: 7px; border-radius: 50%;
-	background: var(--accent-line);
-	opacity: 0;
-	pointer-events: none;
+	background: color-mix(in oklab, var(--ok) 50%, transparent);
+	opacity: 0; pointer-events: none;
+	animation: vt-live-soft 5s ease-out infinite;
+	/* its layer stays while the animation stands paused between the
+	   theme's clock ticks (menu-vantage.js stepPulses) */
+	will-change: transform, opacity;
+}
+html[data-vt-live="err"] #indicators > span[data-indicator="poll-status"][data-style="active"]::after, html[data-vt-alert="warn"] #indicators > span[data-indicator="poll-status"][data-style="active"]::after {
+	background: color-mix(in oklab, var(--warn) 50%, transparent);
 	animation: vt-live 2s ease-out infinite;
 }
+html[data-vt-alert="err"] #indicators > span[data-indicator="poll-status"][data-style="active"]::after {
+	background: color-mix(in oklab, var(--err) 50%, transparent);
+	animation: vt-live 2s ease-out infinite;
+}
+@media (width > 900px) {
+	html[data-vt-live="err"] #indicators > span[data-indicator="poll-status"][data-style="active"]::before, html[data-vt-alert="warn"] #indicators > span[data-indicator="poll-status"][data-style="active"]::before { background: var(--warn); }
+	html[data-vt-alert="err"] #indicators > span[data-indicator="poll-status"][data-style="active"]::before { background: var(--err); }
+}
+/* another window has the focus, or Low-power router is on (menu-vantage.js): no pulse */
+:is(html[data-vt-blur], html[data-vt-power="low"]) #indicators > span[data-indicator="poll-status"][data-style="active"]::after { animation: none; }
+@keyframes vt-live-soft { 0% { transform: scale(1); opacity: .6; } 70%, 100% { transform: scale(2.2); opacity: 0; } }
+@keyframes vt-live { 0% { transform: scale(1); opacity: 1; } 70%, 100% { transform: scale(2.7); opacity: 0; } }
 #indicators > span[data-indicator="poll-status"][data-style="inactive"]::before {
 	content: ""; width: 7px; height: 7px; border-radius: 1px; background: var(--text-3);
-}
-@keyframes vt-live {
-	0% { transform: scale(1); opacity: 1; }
-	70%, 100% { transform: scale(2.7); opacity: 0; }
 }
 /* "Unsaved Changes: N" -> label + prominent count (text node stays for LuCI) */
 #indicators > span[data-indicator][data-count] {
@@ -636,7 +770,7 @@ a.vt-crumb:hover { color: var(--text); }
 	display: inline-flex; align-items: center; justify-content: center;
 	min-width: 20px; height: 20px; padding: 0 6px;
 	border-radius: 999px;
-	background: var(--warn); color: #1a1200;
+	background: var(--warn); color: var(--warn-ink);
 	font: 700 var(--fs-micro)/1 var(--mono);
 }
 #indicators > span[data-indicator="media_error"] { color: var(--err); border-color: var(--err); background: var(--err-soft); }
@@ -645,7 +779,7 @@ a.vt-crumb:hover { color: var(--text); }
    level (.vt-pagetabs shares the .cbi-tabmenu rules below). They scroll with
    the page; the current crumb in the top bar switches between them. */
 .vt-tabs {
-	width: 100%; max-width: calc(var(--content-max) + 2 * var(--sp-6));
+	width: 100%; max-width: var(--main-max);
 	margin: 0 auto; padding: var(--sp-6) var(--sp-6) 0;
 }
 .vt-tabs:not([hidden]) + .vt-main { padding-top: var(--sp-5); }
@@ -654,7 +788,7 @@ a.vt-crumb:hover { color: var(--text); }
 .vt-main {
 	flex: 1 1 auto;
 	width: 100%;
-	max-width: calc(var(--content-max) + 2 * var(--sp-6));
+	max-width: var(--main-max);
 	padding: var(--sp-6);
 	margin: 0 auto;
 }
@@ -740,6 +874,11 @@ a.vt-crumb:hover { color: var(--text); }
 }
 .vt-pal-foot span { display: inline-flex; align-items: center; gap: 6px; }
 .vt-pal-foot .vt-pal-count { margin-left: auto; font-family: var(--mono); font-size: var(--fs-micro); }
+/* no keyboard, no key hints */
+/* no keyboard hints on touch; the result count stays */
+@media (hover: none) {
+	.vt-pal kbd, .vt-pal-foot > span:not(.vt-pal-count) { display: none; }
+}
 
 /* ------------------------------------ 5. content: map, section, options */
 
@@ -756,17 +895,16 @@ a.vt-crumb:hover { color: var(--text); }
 .cbi-map { margin-bottom: var(--sp-6); }
 .cbi-map > h2, .vt-main > h2, #view > h2, #view > div > h2:first-child, .cbi-map > h2:first-child {
 	margin: 0 0 6px;
-	font-size: var(--fs-2xl); font-weight: 650; line-height: 1.2;
+	font-size: var(--fs-2xl); font-weight: 600; line-height: 1.2;
 	letter-spacing: -.02em;
 }
 .vt-main > h2[name="content"] { margin-bottom: var(--sp-5); }
 .cbi-map-descr {
-	max-width: 76ch;
 	margin: 0 0 var(--sp-6);
 	color: var(--text-2);
 	font-size: var(--fs-base); line-height: 1.55;
 }
-.cbi-section-descr { max-width: 80ch; margin: 0 0 var(--sp-4); color: var(--text-2); }
+.cbi-section-descr { margin: 0 0 var(--sp-4); color: var(--text-2); }
 .cbi-map-descr:empty, .cbi-section-descr:empty { display: none; }
 .cbi-map > h2:not(.vt-repeat) + .cbi-tabmenu, .cbi-map > h2:not(.vt-repeat) + .cbi-map-descr:empty + .cbi-tabmenu { margin-top: var(--sp-4); }
 
@@ -785,6 +923,8 @@ a.vt-crumb:hover { color: var(--text); }
     padding: 10px !important;
     border: none !important;
 }
+/* Card padding supplies the space after the final paragraph. */
+.cbi-section > p:last-child { margin-bottom: 0; }
 /* card header row */
 .cbi-section > h3:first-child, .cbi-section > legend:first-child, .cbi-section > .cbi-title:first-child,
 .cbi-section > .cbi-section-remove:first-child + .cbi-title {
@@ -849,20 +989,29 @@ legend { font-size: var(--fs-md); font-weight: 600; padding: 0; margin-bottom: v
 .cbi-value-field > div:not([class]) { min-height: var(--ctl-h); display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); }
 .cbi-value-description {
 	margin-top: 6px;
-	max-width: 70ch;
 	color: var(--text-3);
 	font-size: var(--fs-sm);
 	line-height: 1.5;
 }
 .cbi-value-helpicon img { width: 14px; height: 14px; opacity: .6; }
 
-/* folding help (menu-vantage.js): one line until (i) unfolds it; the
-   button shares the label cell, so both are placed explicitly */
-.cbi-value[data-v-help="closed"] > .cbi-value-field > .vt-help-text {
-	display: -webkit-box; -webkit-box-orient: vertical;
-	-webkit-line-clamp: 1; line-clamp: 1;
-	max-height: 1.5em;
+/* folding help (menu-vantage.js): help longer than a line folds to one
+   and (i) shows all of it in a box. The line is one as laid out (lh): a
+   minimum font size (Firefox) raises the line height but not the em;
+   browsers without lh (Safari before 16.4, Firefox before 120) take the
+   height the script measured (--vt-line). It ends after the first
+   sentence (cut, at --vt-cut), else it fades out where its first line
+   ends (--vt-cut again).
+   The button shares the label cell, so both are placed explicitly. */
+.cbi-value[data-v-help="fold"] > .cbi-value-field > .vt-help-text {
+	max-height: var(--vt-line, 1.5em);
+	max-height: 1lh;
 	overflow: hidden;
+}
+.vt-help-text[data-v-end="cut"] { clip-path: inset(0 calc(100% - var(--vt-cut, 100%)) 0 -2px); }
+.vt-help-text[data-v-end="fade"] {
+	-webkit-mask-image: linear-gradient(to right, #000 calc(var(--vt-cut, 100%) - 4em), transparent var(--vt-cut, 100%));
+	mask-image: linear-gradient(to right, #000 calc(var(--vt-cut, 100%) - 4em), transparent var(--vt-cut, 100%));
 }
 .cbi-value[data-v-help] > .cbi-value-title { grid-row: 1; grid-column: 1; }
 .cbi-value[data-v-help] > .cbi-value-field { grid-row: 1; }
@@ -881,16 +1030,13 @@ legend { font-size: var(--fs-md); font-weight: 600; padding: 0; margin-bottom: v
    with captioned selects) has its text on the second line: so has (i) */
 .cbi-value:has(> .cbi-value-title > br:first-child) > .vt-help { margin-top: 1.5em; }
 
-/* page and section intros fold the same way, (i) leading the first line;
-   the fold needs the button, so without it the text shows whole */
-:is(.cbi-map-descr, .cbi-section-descr)[data-v-help="closed"]:has(> .vt-help) {
-	display: -webkit-box; -webkit-box-orient: vertical;
-	-webkit-line-clamp: 1; line-clamp: 1;
+/* page and section intros fold the same way, (i) leading the line */
+:is(.cbi-map-descr, .cbi-section-descr)[data-v-help="fold"] {
+	max-height: var(--vt-line, 1.55em);
+	max-height: 1lh;
 	overflow: hidden;
+	cursor: pointer;
 }
-.cbi-map-descr[data-v-help="closed"]:has(> .vt-help) { max-height: 1.55em; }       /* its line-height */
-.cbi-section-descr[data-v-help="closed"]:has(> .vt-help) { max-height: 1.5em; }
-:is(.cbi-map-descr, .cbi-section-descr)[data-v-help="closed"]:has(> .vt-help:not([hidden])) { cursor: pointer; }
 :is(.cbi-map-descr, .cbi-section-descr) > .vt-help {
 	display: inline-grid; place-items: center;
 	width: 1.5em; height: 1.5em;
@@ -904,6 +1050,20 @@ legend { font-size: var(--fs-md); font-weight: 600; padding: 0; margin-bottom: v
 .vt-help svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .vt-help:hover { color: var(--text); background: var(--s3); }
 .vt-help[aria-expanded="true"] { color: var(--accent-text); }
+
+/* the box (i) opens, over the page and any modal (menu-vantage.js) */
+.vt-help-pop {
+	position: fixed; z-index: 1100;
+	width: max-content; max-width: min(34em, calc(100vw - 16px));
+	padding: 10px 12px;
+	overflow-y: auto; overscroll-behavior: contain;
+	border: 1px solid var(--line-2); border-radius: var(--r);
+	background: var(--s2); box-shadow: var(--shadow-pop);
+	color: var(--text-2);
+	font-size: var(--fs-sm); line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+.vt-help-pop[hidden] { display: none; }
 
 /* a heading that repeats the breadcrumb or its tab (menu-vantage.js):
    gone from view, still a heading for screen readers */
@@ -953,10 +1113,16 @@ legend { font-size: var(--fs-md); font-weight: 600; padding: 0; margin-bottom: v
 	top: auto !important; bottom: 100% !important;
 	max-height: 50vh !important;
 }
+/* LuCI moves focus into the list when its max-height transition ends, and
+   the 50vh !important above left nothing to transition, so arrow keys never
+   reached "Apply unchecked". A length (not none) on the closed list gives
+   the open one a change to run */
+.cbi-page-actions .cbi-dropdown > ul:not(.dropdown) { max-height: 100vh; }
 
 /* ------------------------------------------------------------ 6. widgets */
 
-input, select, textarea, button { font: inherit; color: inherit; }
+/* zero specificity, like the button rule below, which must win over it */
+:where(input, select, textarea, button) { font: inherit; color: inherit; }
 
 .cbi-input-text, .cbi-input-password, .cbi-input-select, .cbi-input-textarea,
 .cbi-section-create-name, .vt-main select, .vt-main textarea,
@@ -976,12 +1142,11 @@ input, select, textarea, button { font: inherit; color: inherit; }
 	line-height: 20px;
 	transition: border-color .12s, box-shadow .12s;
 }
-.vt-main textarea, .cbi-input-textarea, .modal textarea { max-width: calc(2 * var(--field-max)); min-height: 88px; font-family: var(--mono); font-size: var(--fs-sm); resize: vertical; }
+.vt-main textarea, .cbi-input-textarea, .modal textarea { max-width: 100%; min-height: 88px; font-family: var(--mono); font-size: var(--fs-sm); resize: vertical; }
 /* read-only text (System and Kernel log) is a viewer, not a field: full width */
 .vt-main textarea[readonly] { max-width: none; }
-/* a short free-text option (System -> Notes: no rows set) is as wide as the
-   fields beside it; editors that set their rows (Scheduled Tasks) stay wide */
-.cbi-value-field textarea.cbi-input-textarea:not([rows]) { max-width: var(--field-max); }
+/* System notes follow the neighbouring single-line fields. */
+body[data-page="admin-system-system"] .cbi-value[data-name="notes"] textarea { max-width: var(--field-max); }
 .vt-main select, .cbi-input-select, .modal select {
 	appearance: none; -webkit-appearance: none;
 	padding-right: 30px;
@@ -997,7 +1162,20 @@ input, select, textarea, button { font: inherit; color: inherit; }
 	field-sizing: content;
 	width: auto; min-width: min(100%, var(--field-max)); max-width: 100%;
 }
-.vt-main select[multiple] { background-image: none; padding-right: 10px; }
+/* a listbox (multiple, or size above 1) has no arrow, in a page or a
+   modal (replaces `.vt-main select[multiple]`) */
+:is(.vt-main, .modal) select:is([multiple], [size]:not([size="1"])):not(.vt-app *) { background-image: none; padding-right: 10px; }
+/* adblock (DNS Report -> Refresh...) and banIP (Set Reporting -> Set
+   Content...) give the <label> around their select the select's class:
+   the label stays a label, not a second field with its own arrow */
+label.cbi-input-select {
+	display: block;
+	width: auto; max-width: none; min-height: 0;
+	padding: 0;
+	background: none;
+	border: 0; border-radius: 0;
+	transition: none;
+}
 input::placeholder, textarea::placeholder { color: var(--text-3); opacity: 1; }
 input:hover, select:hover, textarea:hover { border-color: var(--text-3); }
 input:focus, select:focus, textarea:focus {
@@ -1015,6 +1193,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 	border-color: var(--focus);
 	box-shadow: 0 0 0 1px var(--focus), 0 0 0 4px var(--accent-soft);
 }
+/* a disabled field does not answer the pointer */
+:is(input, select, textarea):not([type="checkbox"], [type="radio"], [type="range"], .vt-pal-input, .vt-app *):disabled:hover { border-color: var(--line-2); }
 input[disabled], select[disabled], textarea[disabled], input[readonly] { opacity: .6; cursor: not-allowed; }
 input[readonly] { cursor: default; }
 
@@ -1024,6 +1204,84 @@ input[readonly] { cursor: default; }
 	background-color: var(--err-soft) !important;
 	color: var(--text) !important;
 	box-shadow: 0 0 0 3px var(--err-soft) !important;
+}
+
+/* a select's list drawn by the browser (Firefox, Safari, Chromium before
+   135, and the selects below that keep it) takes little from the page
+   but the options' colours. It took the field's background: a tinted
+   field (invalid, a firewall warning) opened a cream list with light
+   text in dark mode. The options carry the surface and text instead. */
+:is(.vt-main, .modal) select:not([multiple], [size], .vt-app *) :is(option, optgroup) { background-color: var(--s2); color: var(--text); }
+:is(.vt-main, .modal) select:not([multiple], [size], .vt-app *) option:disabled { color: var(--text-3); }
+
+/* a select's list drawn in the page (customizable select, Chromium 135+)
+   gets the .cbi-dropdown list's look. Not listboxes, nor a select LuCI
+   sizes itself (width:auto, Wireless "Operating frequency"): base-select
+   sizes a field to its chosen label, not its longest. The dashboard
+   styles its own. */
+@supports (appearance: base-select) {
+	:is(.vt-main, .modal) select:not([multiple], [size], [style*="width:auto"], .vt-app *),
+	:is(.vt-main, .modal) select:not([multiple], [size], [style*="width:auto"], .vt-app *)::picker(select) { appearance: base-select; }
+	/* the field as before: base-select makes it a flex box with the value
+	   at the top (2px high, 6px on touch) and free to wrap; centre it on
+	   one line, cut at the content edge as the native field cuts it */
+	:is(.vt-main, .modal) select:not([multiple], [size], [style*="width:auto"], .vt-app *) {
+		align-items: center;
+		white-space: nowrap;
+		overflow: clip; overflow-clip-margin: content-box;
+	}
+	/* the theme draws the arrow */
+	:is(.vt-main, .modal) select:not([multiple], [size], [style*="width:auto"], .vt-app *)::picker-icon { display: none; }
+	/* focus moves to an option while the list is open: the field keeps its
+	   ring and its arrow turns to the signal, as on an open .cbi-dropdown */
+	:is(.vt-main, .modal) select:not([multiple], [size], [style*="width:auto"], .vt-app *):open {
+		border-color: var(--focus);
+		box-shadow: 0 0 0 1px var(--focus), 0 0 0 4px var(--accent-soft);
+		background-image: linear-gradient(45deg, transparent 50%, var(--accent-text) 50%), linear-gradient(135deg, var(--accent-text) 50%, transparent 50%);
+	}
+	/* the list: 4px off the field, at least as wide, above it when there
+	   is more room there; 50vh at most, as .cbi-dropdown, and never past
+	   the screen (100% is the room beside the field: less the 8px of
+	   margins below, an 8px gutter across) */
+	:is(.vt-main, .modal) select:not([multiple], [size], [style*="width:auto"], .vt-app *)::picker(select) {
+		margin: 4px 0;
+		padding: 4px;
+		min-inline-size: anchor-size(self-inline);
+		max-inline-size: calc(100% - var(--sp-2));
+		max-block-size: min(50vh, calc(100% - 8px));
+		background: var(--s2);
+		color: var(--text);
+		border: 1px solid var(--line-2);
+		border-radius: var(--r);
+		box-shadow: var(--shadow-pop);
+		overflow: hidden auto;
+		scrollbar-width: thin;
+	}
+	/* choices as .cbi-dropdown's: long ones wrap */
+	:is(.vt-main, .modal) select:not([multiple], [size], [style*="width:auto"], .vt-app *) option {
+		min-block-size: calc(var(--ctl-h) - 4px);
+		padding: 4px 8px;
+		border-radius: var(--r-sm);
+		white-space: normal;
+		color: var(--text);
+		font-weight: 400;
+	}
+	/* the chosen one in the signal (fill and weight, no check mark); the
+	   one under the pointer or the keyboard on --s4, the keyboard's with
+	   the accent bar */
+	:is(.vt-main, .modal) select:not([multiple], [size], [style*="width:auto"], .vt-app *) option::checkmark { display: none; }
+	/* the tint over an opaque fill: apps that copy a select's option colour
+	   onto their own list (PassWall's node picker) would get a see-through one */
+	:is(.vt-main, .modal) select:not([multiple], [size], [style*="width:auto"], .vt-app *) option:checked { color: var(--accent-text); font-weight: 600; background: linear-gradient(var(--accent-soft) 0 0) var(--s2); }
+	:is(.vt-main, .modal) select:not([multiple], [size], [style*="width:auto"], .vt-app *) option:is(:hover, :focus-visible) { background: var(--s4); color: var(--text); outline: none; }
+	:is(.vt-main, .modal) select:not([multiple], [size], [style*="width:auto"], .vt-app *) option:focus-visible { box-shadow: inset 2px 0 0 var(--accent-text); }
+	:is(.vt-main, .modal) select:not([multiple], [size], [style*="width:auto"], .vt-app *) option:disabled { color: var(--text-3); background: none; cursor: not-allowed; }
+	/* a group's label: quiet, its choices as any other */
+	:is(.vt-main, .modal) select:not([multiple], [size], [style*="width:auto"], .vt-app *) optgroup { color: var(--text-3); font-weight: 600; }
+	/* touch: each choice is a touch target, as the dropdown's */
+	@media (pointer: coarse) {
+		:is(.vt-main, .modal) select:not([multiple], [size], [style*="width:auto"], .vt-app *) option { min-block-size: var(--ctl-h); }
+	}
 }
 
 /* password + reveal and other control groups */
@@ -1045,6 +1303,7 @@ input[readonly] { cursor: default; }
 
 /* checkbox */
 .cbi-checkbox { display: inline-flex; align-items: center; min-height: var(--ctl-h); gap: var(--sp-2); }
+input.cbi-checkbox { min-height: 0; }   /* banIP puts the class on the box itself */
 /* its help 8px under the box, as under a field: the box (16px) sits
    centred in a control-high row */
 @media (width > 720px) {
@@ -1206,7 +1465,8 @@ input[type="button"], input[type="reset"], input[type="submit"]) {
 	border-radius: var(--r);
 	box-shadow: var(--shadow-pop);
 	overflow-x: hidden; overflow-y: auto;
-	transition: max-height .12s ease-out;
+	/* LuCI focuses the selected item on transitionend; avoid animating its scroll range. */
+	transition: max-height .001s;
 }
 .cbi-dropdown[open] > ul.dropdown[style*="bottom"] { top: auto; }
 .cbi-dropdown[open] > ul.dropdown > li {
@@ -1268,6 +1528,68 @@ input[type="button"], input[type="reset"], input[type="submit"]) {
 .cbi-dropdown.btn.spinning > ul.dropdown, .cbi-dropdown.cbi-button.spinning > ul.dropdown { display: none !important; }
 .cbi-dropdown.btn[open] > ul.preview, .cbi-dropdown.cbi-button[open] > ul.preview { display: flex; }
 
+/* LuCI sizes an open list to the room left in its scroll parent, and picks
+   that parent before the list opens: a card that scrolls sideways (a
+   section holding a table, every card at 721-1180 px) capped long lists at
+   2-4 rows (DNS record types, log facility) or flipped them upwards. Focus
+   lands on the dropdown before it opens, so a focused one lifts the
+   card's scroller as an open one does */
+.cbi-section:has(.cbi-dropdown:focus-within), .cbi-tblsection:has(.cbi-dropdown:focus-within) { overflow: visible; }
+/* the bridge VLAN table sets its scroller inline (tools/network.js), which
+   beat this and the open rule: its port list showed 3 of 4 rows */
+.cbi-tblsection[style*="overflow"]:has(.cbi-dropdown:is(:focus-within, [open])) { overflow: visible !important; }
+
+/* rich choices (flow offloading, RA flags): LuCI sets each description
+   min-width: 25vw to widen its list; ours is the field's width, so from
+   1440 px the text ran past the row's clip ("indicates tl"). In the
+   chosen row only the title is bold */
+.cbi-dropdown[open] > ul.dropdown > li .hide-close[style*="min-width"] { min-width: 0 !important; }
+.cbi-dropdown[open] > ul.dropdown > li > label { min-width: 0; }
+.cbi-dropdown[open] > ul.dropdown > li .hide-close > span { font-weight: 400; }
+
+/* the current choice keeps its colour under focus and the pointer: LuCI
+   focuses it on open, and the grey left only the weight to tell it */
+.cbi-dropdown:not(.btn, .cbi-button)[open] > ul.dropdown > li[selected]:is(:hover, .focus) { color: var(--accent-text); }
+/* LuCI 25.12 never binds its mouseover-to-focus, so the pointer and the
+   keyboard each mark a row: hover takes the lighter step, and the focused
+   row (fill and edge) stays the one Enter picks */
+.cbi-dropdown[open] > ul.dropdown > li:hover:not(.focus) { background: var(--s3); }
+
+/* a chosen network or zone is already a badge: it is the chip, without a
+   second frame around it (Covered networks, zone forwards) */
+.cbi-dropdown[multiple] > ul:not(.dropdown) > li[display]:has(> label > :is(.ifacebadge, .zonebadge):only-child) { padding: 0; background: none; border: 0; }
+/* the custom-value field of a multiple choice spans its row, as in a
+   single choice (it stopped at the label's content width) */
+.cbi-dropdown[multiple][open] > ul.dropdown > li > label:has(> .create-item-input) { flex: 1 1 auto; }
+
+/* a zone's live interface inside its badge: the zone badge already frames
+   it; the active ring drew a pill in a pill (zone pickers, closed and open) */
+.zonebadge .ifacebadge-active { box-shadow: none; }
+
+/* a dropdown in a table cell is as narrow as its column (bridge VLAN
+   ports: 4em) and so was its list: "Not Member" read "Not Mem". The open
+   list takes its choices' width instead (LuCI's touch layout, which sets
+   left and right itself, keeps its full-width list) */
+.td .cbi-dropdown:not(.btn, .cbi-button)[open] > ul.dropdown:not([style*="left:"]) {
+	right: auto;
+	width: max-content;
+	max-width: min(24em, calc(100vw - 2 * var(--sp-4)));
+}
+
+/* LuCI's touch layout (any touch screen, not only phones) stretches the
+   list from the viewport's left edge to its right and hangs 50vh of it
+   under a field it scrolls to mid-screen: on a tablet it crossed the whole
+   page and the dialog, and everywhere it ended past the screen's foot.
+   It stops above the foot (and a phone's bottom bar); wider than a phone
+   it keeps to its field */
+.cbi-dropdown[open] > ul.dropdown[style*="left:"] {
+	max-height: calc(50vh - var(--ctl-h) - var(--sp-3) - var(--bar-h, 0px) - env(safe-area-inset-bottom, 0px)) !important;
+}
+@media (width > 720px) {
+	.cbi-dropdown:not(.btn, .cbi-button)[open] > ul.dropdown[style*="left:"] { left: -1px !important; right: -1px !important; }
+	.cbi-dropdown:is(.btn, .cbi-button)[open] > ul.dropdown[style*="left:"] { left: auto !important; right: -1px !important; }
+}
+
 
 /* button variants (after the dropdown rules so ComboButtons pick them up) */
 .cbi-dropdown:is(.btn, .cbi-button) { background: var(--s3); border-color: var(--line-2); color: var(--text); font-weight: 500; }
@@ -1297,6 +1619,19 @@ input[type="button"], input[type="reset"], input[type="submit"]) {
 :is(.btn, .cbi-button, .cbi-dropdown).cbi-button-action.important:hover,
 :is(.btn, .cbi-button, .cbi-dropdown).cbi-button-save.important:hover {
 	background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+/* LuCI's emphasis without .important (Bootstrap outlines these, apps mark
+   Open / Restart / Refresh with them): the signal as text and line on the
+   plain fill. In table rows only Edit keeps it: a row of Start / Restart /
+   Reload / Stop on every line (System -> Startup) stays plain */
+:is(.btn, .cbi-button):is(.cbi-button-action, .cbi-button-reload, .cbi-button-find, .cbi-button-link, .cbi-button-download):not(.important, .cbi-dropdown, .td *),
+:is(.btn, .cbi-button).cbi-button-edit:not(.important, .cbi-dropdown) {
+	border-color: var(--accent-line);
+	color: var(--accent-text);
+}
+:is(.btn, .cbi-button):is(.cbi-button-action, .cbi-button-reload, .cbi-button-find, .cbi-button-link, .cbi-button-download):not(.important, .cbi-dropdown, .td *):hover,
+:is(.btn, .cbi-button).cbi-button-edit:not(.important, .cbi-dropdown):hover {
+	background: var(--accent-soft);
 }
 .cbi-value-field :is(.btn, .cbi-button).cbi-button-apply,
 .td :is(.btn, .cbi-button).cbi-button-apply {
@@ -1421,11 +1756,17 @@ table { border-collapse: separate; border-spacing: 0; width: 100%; }
 :is(.cbi-section, .cbi-value) .table .tr > :is(.th, .td):first-child { padding-left: var(--card-px); }
 :is(.cbi-section, .cbi-value) .table .tr > :is(.th, .td):last-child { padding-right: var(--card-px); }
 .cbi-section > .table:last-child, .cbi-section > div:last-child > .table:last-child { margin-bottom: calc(-1 * var(--card-py) + 4px); }
+/* Nested sections have no bottom padding for the table to bleed into. */
+.cbi-section .cbi-section > .table:last-child,
+.cbi-section .cbi-section > div:last-child > .table:last-child { margin-bottom: 0; }
 .table .tr.table-titles > .th, .table .cbi-section-table-titles > .th, thead .th {
 	position: sticky; top: var(--stick-top); z-index: 20;
 }
 
-/* cells: numbers and addresses never break, rate pairs stack */
+/* cells: numbers and addresses never break, rate pairs stack. The titles
+   are matched in English; under a translated one, menu-vantage.js marks
+   the same columns' cells .vt-nowrap (#111) */
+.td.vt-nowrap:not(.cbi-value-field),
 .td:not(.cbi-value-field)[data-title*="MAC" i], .td:not(.cbi-value-field)[data-title*="address" i], .td:not(.cbi-value-field)[data-title*="IPv" i], .td:not(.cbi-value-field)[data-title*="Gateway" i],
 .td:not(.cbi-value-field)[data-title*="Target" i], .td:not(.cbi-value-field)[data-title*="Source" i], .td:not(.cbi-value-field)[data-title*="DUID" i], .td:not(.cbi-value-field)[data-title="PID"],
 .td:not(.cbi-value-field)[data-title*="Metric" i], .td:not(.cbi-value-field)[data-title*="Priority" i], .td:not(.cbi-value-field)[data-title*="Remaining" i], .td:not(.cbi-value-field)[data-title*="Usage" i] {
@@ -1437,6 +1778,10 @@ table { border-collapse: separate; border-spacing: 0; width: 100%; }
 .td > span:has(> span + br + span) > br { display: none; }
 .td > span:has(> span + br + span) > span { white-space: nowrap; font: var(--fs-sm)/1.5 var(--mono); }
 .td > span:has(> span + br + span) > span:not(:first-child) { color: var(--text-3); font-size: var(--fs-micro); }
+/* Wireless's stations: a rate line ("576.4 Mbit/s, 160 MHz, EHT-MCS 3,
+   EHT-NSS 2") breaks at its commas when the columns run short, which
+   kept the table wider than its card */
+.assoclist .td > span:has(> span + br + span) > span { white-space: normal; }
 
 /* badges inside cells are content, not pills: icon + text (a badge that
    is a tooltip, Interfaces' device details, keeps the tooltip's box) */
@@ -1451,6 +1796,14 @@ table { border-collapse: separate; border-spacing: 0; width: 100%; }
 .cbi-section-table-descr > .th { font-weight: 400; text-transform: none; letter-spacing: 0; font-size: var(--fs-sm); }
 .cbi-section-table-cell, .cbi-section-table-row > .td { vertical-align: middle; }
 .td.cbi-value-field .cbi-dropdown, .td.cbi-value-field input:not([type="checkbox"]), .td.cbi-value-field select { max-width: 220px; }
+/* A text field is width:100%, which an auto table layout counts as 0 wide, so
+   a column with a short header (Name and Path in Services > Network Shares)
+   shrank to a sliver and hid its value. Give the field a floor: 7em, which a
+   wide table (Samba's shares) still nearly fits beside; not on a phone,
+   where each row is a card of fixed columns and a floor overflows it. */
+@media (width > 720px) {
+	.td.cbi-value-field input[type="text"], .td.cbi-value-field input:not([type]) { min-width: 7em; }
+}
 
 /* key/value tables (status pages): quiet label column */
 .table:not(:has(.table-titles)) .tr > .td:first-child:nth-last-child(2) {
@@ -1460,7 +1813,11 @@ table { border-collapse: separate; border-spacing: 0; width: 100%; }
 }
 
 .td.cbi-value-field.inactive { visibility: hidden; }
-.td.cbi-section-actions, .th.cbi-section-actions { text-align: right; white-space: nowrap; width: 1%; }
+.td.cbi-section-actions, .th.cbi-section-actions { white-space: nowrap; width: 1%; }
+/* the buttons end the row, the filter row's Reset with them; a title
+   over them (Static Lease) starts where they start, as every other
+   column's title does */
+.td.cbi-section-actions, .cbi-section-table-filter > .th.cbi-section-actions { text-align: right; }
 .td.cbi-section-actions > div:not(.btn, .cbi-button) { display: inline-flex; gap: 4px; flex-wrap: nowrap; align-items: center; }
 .td.cbi-section-actions .btn, .td.cbi-section-actions .cbi-button { padding: 0 10px; }
 /* three or more row actions: the main one plus ⋯ (menu-vantage.js
@@ -1479,24 +1836,27 @@ table { border-collapse: separate; border-spacing: 0; width: 100%; }
 .td.cbi-section-actions .vt-acts-more.spinning::before { margin: 0; }
 .vt-actmenu {
 	position: fixed; z-index: 1100;
-	display: flex; flex-direction: column; gap: 2px;
-	min-width: 168px; max-width: calc(100vw - 16px); padding: 6px;
+	display: flex; flex-direction: column;
+	min-width: 168px; max-width: calc(100vw - 16px); padding: var(--sp-1);
 	overflow-y: auto; overscroll-behavior: contain;
 	border: 1px solid var(--line-2); border-radius: var(--r);
 	background: var(--s2); box-shadow: var(--shadow-pop);
 }
 .vt-actmenu[hidden] { display: none; }
+/* items as .cbi-dropdown's: the pointer's on --s4, the keyboard's with the
+   accent bar too */
 .vt-actmenu-item {
 	display: flex; align-items: center;
-	min-height: var(--ctl-h); padding: 0 12px;
+	min-height: calc(var(--ctl-h) - 4px); padding: 4px 8px;
 	border: 0; border-radius: var(--r-sm);
 	background: transparent; color: var(--text);
-	font: inherit; font-size: var(--fs-base); text-align: left; white-space: nowrap; cursor: pointer;
+	font: inherit; font-size: var(--fs-base); font-weight: 400; text-align: left; white-space: nowrap; cursor: pointer;
 }
-.vt-actmenu-item:hover { background: var(--s3); }
-.vt-actmenu-item:focus-visible { background: var(--s3); outline: 2px solid var(--focus); outline-offset: -2px; }
+.vt-actmenu-item:hover { background: var(--s4); }
+.vt-actmenu-item:focus-visible { background: var(--s4); outline: none; box-shadow: inset 2px 0 0 var(--accent-text); }
 .vt-actmenu-item.is-danger { color: var(--err); }
 .vt-actmenu-item[disabled] { opacity: .5; cursor: default; }
+.vt-actmenu-item[disabled]:hover { background: none; }
 .drag-handle { cursor: grab; color: var(--text-3); padding: 0 6px; font-family: var(--mono); }
 .drag-over-above > .td, .drag-over-above > td { box-shadow: inset 0 2px 0 var(--accent-text); }
 .drag-over-below > .td, .drag-over-below > td { box-shadow: inset 0 -2px 0 var(--accent-text); }
@@ -1516,6 +1876,9 @@ table { border-collapse: separate; border-spacing: 0; width: 100%; }
 div.right, div.left { display: block; }
 div.right { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-4); }
 div.right > .btn, div.right > .cbi-button, div.right > button { margin-left: 0; }
+/* a .left and .right pair on one line (the upload dialog's Browse… and
+   Cancel/Upload): the right group keeps to the line */
+#modal_overlay .modal div.left + div.right { margin-top: 0; }
 
 /* Tabs: one segmented control for every level, the menu's page tabs
    (.vt-pagetabs in #vt-tabs), ui.tabs at page level, in a form or modal,
@@ -1549,7 +1912,9 @@ div.right > .btn, div.right > .cbi-button, div.right > button { margin-left: 0; 
 }
 :is(.cbi-tabmenu > li > a, .vt-pagetabs > .vt-tab):hover { color: var(--text); }
 :is(.cbi-tabmenu > li > a, .vt-pagetabs > .vt-tab):focus-visible { outline-offset: -1px; border-radius: calc(var(--r) + 3px); }
-.cbi-tabmenu > li.cbi-tab > a, .vt-pagetabs > .vt-tab[aria-current] { background-color: var(--seg-on); color: var(--text); font-weight: 600; box-shadow: var(--seg-on-ring); }
+/* the selected segment carries the signal (text and ring): white on the
+   grey track alone was hard to pick out; hover keeps it */
+.cbi-tabmenu > li.cbi-tab > a, .cbi-tabmenu > li.cbi-tab > a:hover, .vt-pagetabs > .vt-tab[aria-current] { background-color: var(--seg-on); color: var(--accent-text); font-weight: 600; box-shadow: var(--seg-on-ring); }
 .cbi-tabmenu > li[data-errors] > a::after {
 	content: attr(data-errors);
 	display: inline-flex; align-items: center; justify-content: center;
@@ -1594,6 +1959,10 @@ div.right > .btn, div.right > .cbi-button, div.right > button { margin-left: 0; 
 .ifacebadge img { width: 16px; height: 16px; }
 .ifacebadge.large { padding: 6px 10px; gap: 8px; font-size: var(--fs-base); }
 .ifacebadge.large img { width: 20px; height: 20px; }
+/* a network's status (Wireless, its dialog): the signal beside the details
+   keeps one width, wide enough for "-100/-110 dBm", so the details do not
+   move as the reading changes (#122) */
+.ifacebadge.large > small:first-child { flex: none; min-width: 8.5em; text-align: center; }
 .ifacebadge-active { border-color: var(--accent-line); box-shadow: inset 0 0 0 1px var(--accent-line); }
 /* the device details tooltip (Interfaces): icon beside the details */
 .cbi-tooltip.ifacebadge { display: inline-grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 10px; }
@@ -1631,7 +2000,7 @@ div.right > .btn, div.right > .cbi-button, div.right > button { margin-left: 0; 
 :is(.ifacebox-body, .ifacebadge) > span:has(> .nowrap) > .nowrap > strong {
 	color: var(--text-3);
 	font: 600 var(--fs-micro)/1.55 var(--font);
-	letter-spacing: .06em; text-transform: uppercase;
+	letter-spacing: .08em; text-transform: uppercase;
 	white-space: nowrap;
 }
 
@@ -1670,16 +2039,63 @@ div.right > .btn, div.right > .cbi-button, div.right > button { margin-left: 0; 
    instead of from clipping */
 .ifacebox:has(.cbi-tooltip-container) { overflow: visible; }
 /* Status -> Port status: LuCI spreads the boxes over equal columns as wide
-   as the card (inline grid, boxes capped at 100 px); pack them instead */
+   as the card (inline grid, boxes capped at 100 px); pack them instead.
+   ImmortalWrt fixes the boxes at 100 px and centres them in the row, so a
+   box whose counter wraps stood taller than the rest: fill the column and
+   share the row's height */
 div:has(> .ifacebox > .ifacebox-head.cbi-tooltip-container) {
 	grid-template-columns: repeat(auto-fill, minmax(108px, 124px)) !important; gap: 12px; justify-content: start;
+	align-items: stretch !important; justify-items: stretch !important;
 }
-div:has(> .ifacebox > .ifacebox-head.cbi-tooltip-container) > .ifacebox { width: 100%; max-width: none !important; margin: 0 !important; }
+div:has(> .ifacebox > .ifacebox-head.cbi-tooltip-container) > .ifacebox { width: 100% !important; max-width: none !important; margin: 0 !important; }
+/* a counter stays on one line with its unit: ImmortalWrt prints two
+   decimals ("184.31 MiB"), and the unit dropped to a line of its own (#168) */
+.ifacebox-head.cbi-tooltip-container + .ifacebox-body > .cbi-tooltip-container { white-space: nowrap; }
 .ifacebox:has(.cbi-tooltip-container) > :first-child { border-radius: calc(var(--r-lg) - 1px) calc(var(--r-lg) - 1px) 0 0; }
 .ifacebox:has(.cbi-tooltip-container) > :last-child { border-radius: 0 0 calc(var(--r-lg) - 1px) calc(var(--r-lg) - 1px); }
 .ifacebox-head.active { background: var(--accent-soft); color: var(--accent-text); }
 .ifacebox-body { padding: 8px 10px; font-size: var(--fs-sm); color: var(--text-2); }
 .ifacebox-body img { width: 18px; height: 18px; }
+/* Status -> Port status, each box: a ring by the name of a port without
+   link (as on the upstream and radio cards; a port with link has none),
+   the speed as its figure, the zone as a bare bar and the counters'
+   arrows in the dashboard's upload and download colours (menu-vantage.js
+   puts them in spans). LuCI's port picture only repeats the link state:
+   hidden. A port without link is muted throughout */
+.ifacebox:has(> .ifacebox-head.cbi-tooltip-container) > .ifacebox-head:first-child {
+	display: flex; align-items: center; gap: 8px;
+	padding: 10px 10px 2px;
+	background: none; border-bottom: 0;
+	font-family: var(--mono); font-weight: 600 !important; text-align: left;
+}
+.ifacebox:has(> .ifacebox-head.cbi-tooltip-container) > .ifacebox-head:first-child::before {
+	content: ""; flex: none;
+	width: 8px; height: 8px; border-radius: 50%;
+	box-shadow: inset 0 0 0 1.5px var(--text-3);
+}
+.ifacebox:has(> .ifacebox-body > img[src$="_down.svg"]) > .ifacebox-head:first-child { color: var(--text-2); }
+.ifacebox:has(> .ifacebox-body > img[src$="_up.svg"]) > .ifacebox-head:first-child::before { content: none; }
+.ifacebox:has(> .ifacebox-head.cbi-tooltip-container) > .ifacebox-head:first-child + .ifacebox-body { padding: 2px 10px 6px; color: var(--text-3); }
+.ifacebox:has(> .ifacebox-body > img[src$="_up.svg"]) > .ifacebox-head:first-child + .ifacebox-body { color: var(--text-2); }
+.ifacebox:has(> .ifacebox-head.cbi-tooltip-container) > .ifacebox-head:first-child + .ifacebox-body > :is(img, br) { display: none; }
+.ifacebox:has(> .ifacebox-head.cbi-tooltip-container) > .ifacebox-head:first-child + .ifacebox-body > span {
+	color: var(--text);
+	font: 600 var(--fs-md)/1.4 var(--font); font-variant-numeric: tabular-nums;
+}
+.ifacebox-head.cbi-tooltip-container:has(> .zonebadge) { gap: 3px; padding: 4px 10px; background: none; border-bottom: 0; }
+.ifacebox-head.cbi-tooltip-container > .zonebadge[style*="--zone-color-rgb"] {
+	height: 3px !important; padding: 0;
+	border: 0; border-radius: var(--r-xs); box-shadow: none;
+	background-color: rgb(var(--zone-color-rgb)) !important;
+}
+.ifacebox-head.cbi-tooltip-container > .zonebadge:is([style*="--zone-color-rgb: 238, 238, 238"], [style*="--zone-color-rgb:238, 238, 238"], [style*="--zone-color-rgb:238,238,238"]) { background-color: var(--text-3) !important; }
+.ifacebox-head.cbi-tooltip-container + .ifacebox-body { padding: 4px 10px 10px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+/* the PoE power line comes inline as black: black on the dark card */
+.ifacebox-head.cbi-tooltip-container + .ifacebox-body > .cbi-tooltip-container > span[style*="color:#000"] { color: inherit !important; }
+.ifacebox:has(> .ifacebox-body > img[src$="_down.svg"]) > .ifacebox-head.cbi-tooltip-container + .ifacebox-body { color: var(--text-3); }
+.vt-port-dir[data-dir="tx"] { color: var(--v-chart-5); }
+.vt-port-dir[data-dir="rx"] { color: var(--v-chart-1); }
+.ifacebox:has(> .ifacebox-body > img[src$="_down.svg"]) .vt-port-dir { color: inherit; }
 
 .network-status-table > .ifacebox { display: flex; }
 .network-status-table .ifacebox-head {
@@ -1689,13 +2105,15 @@ div:has(> .ifacebox > .ifacebox-head.cbi-tooltip-container) > .ifacebox { width:
 	color: var(--text) !important;
 	font-size: var(--fs-md); text-align: left;
 }
-.network-status-table .ifacebox-head strong { font-weight: 650; font-family: var(--mono); letter-spacing: -.01em; }
+.network-status-table .ifacebox-head strong { font-weight: 600; font-family: var(--mono); letter-spacing: -.01em; }
+/* up is the normal case and draws nothing; a box that is down (an
+   upstream not connected, a radio off) gets a hollow ring */
 .network-status-table .ifacebox-head::before {
 	content: ""; flex: none;
 	width: 8px; height: 8px; border-radius: 50%;
-	background: var(--text-3);
+	box-shadow: inset 0 0 0 1.5px var(--text-3);
 }
-.network-status-table .ifacebox-head.active::before { background: var(--accent-text); box-shadow: 0 0 0 3px var(--accent-soft); }
+.network-status-table .ifacebox-head.active::before { content: none; }
 .network-status-table .ifacebox-head[data-v-band]::after {
 	content: attr(data-v-band);
 	margin-left: auto;
@@ -1759,34 +2177,6 @@ div:has(> .ifacebox > .ifacebox-head.cbi-tooltip-container) > .ifacebox { width:
 .zone-forwards { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .zone-forwards > span { color: var(--text-3); }
 
-/* progress bar: text only exists in title */
-.cbi-progressbar {
-	position: relative;
-	width: 100%; max-width: 520px;
-	height: 22px;
-	background: var(--s2);
-	border: 1px solid var(--line);
-	border-radius: var(--r-sm);
-	overflow: hidden;
-}
-.cbi-progressbar > div {
-	height: 100%;
-	width: 0;
-	background: linear-gradient(90deg, color-mix(in srgb, var(--accent-text) 22%, transparent), color-mix(in srgb, var(--accent-text) 48%, transparent));
-	transition: width .3s ease-out;
-}
-.cbi-progressbar::before {
-	content: attr(title);
-	position: absolute; inset: 0;
-	display: flex; align-items: center;
-	padding: 0 8px;
-	color: var(--text);
-	font: 500 var(--fs-micro)/1 var(--mono);
-	font-variant-numeric: tabular-nums;
-	white-space: nowrap;
-	z-index: 1;
-}
-
 /* notifications */
 .alert-message {
 	position: relative;
@@ -1849,7 +2239,7 @@ div:has(> .ifacebox > .ifacebox-head.cbi-tooltip-container) > .ifacebox { width:
 	pointer-events: none;
 }
 .cbi-tooltip.error { background: var(--err); border-color: var(--err); color: var(--err-ink); }
-.cbi-tooltip.warning { background: var(--warn); border-color: var(--warn); color: #1a1200; }
+.cbi-tooltip.warning { background: var(--warn); border-color: var(--warn); color: var(--warn-ink); }
 .cbi-tooltip.info { background: var(--info); border-color: var(--info); color: var(--info-ink); }
 .cbi-tooltip-container { position: relative; cursor: help; }
 /* sized to its text, not to a narrow container such as a 100 px port box */
@@ -1869,9 +2259,16 @@ div:has(> .ifacebox > .ifacebox-head.cbi-tooltip-container) > .ifacebox { width:
 }
 body.modal-overlay-active { overflow: hidden; }
 body.modal-overlay-active #modal_overlay { display: block; }
+/* a plain dialog is sized by max-width, as in LuCI's own themes: a page
+   that needs it wider sets an inline max-width (Wireless and travelmate
+   scans, banIP's and adblock's maps: 90%), which a fixed width left at
+   720px (#128). LuCI's own kinds below keep a fixed width: nothing clears
+   that inline value, so after a scan it would stretch the Join form, the
+   changes dialog and the apply countdown too */
 #modal_overlay > .modal {
 	position: relative;
-	width: min(720px, 100%);
+	width: 100%;
+	max-width: 720px;
 	margin: 0 auto;
 	padding: var(--sp-5) var(--sp-6);
 	background: var(--s1);
@@ -1887,7 +2284,13 @@ body.modal-overlay-active #modal_overlay { display: block; }
 	border-bottom: 1px solid var(--line);
 	font-size: var(--fs-lg);
 }
-#modal_overlay > .modal.cbi-modal { width: min(960px, 100%); }
+/* showModal(null, ...) still adds the title, empty: no bar for it */
+#modal_overlay > .modal > h4:first-child:empty { display: none; }
+#modal_overlay > .modal.cbi-modal { width: min(960px, 100%); max-width: none; }
+#modal_overlay > .modal.uci-dialog { width: min(720px, 100%); max-width: none; }
+#modal_overlay > .modal .cbi-progressbar { width: 100%; max-width: none; }
+#modal_overlay > .modal:has(> textarea[readonly]) { width: min(1080px, 100%); max-width: none; }
+#modal_overlay > .modal > textarea[readonly] { max-width: 100%; }
 #modal_overlay > .modal .cbi-section { background: none; border: 0; padding: 0; margin: 0; box-shadow: none; }
 /* a modal's sections have no card padding, so nothing in them bleeds out
    by it: tables keep the modal's width (a bleed scrolled the section
@@ -1913,6 +2316,7 @@ body.modal-overlay-active #modal_overlay { display: block; }
 /* apply / rollback countdown */
 #modal_overlay > .modal.alert-message {
 	width: min(520px, 100%);
+	max-width: none;
 	margin-top: 18vh;
 	padding: var(--sp-5) var(--sp-6);
 	border-left-width: 1px;
@@ -1928,9 +2332,24 @@ body.modal-overlay-active #modal_overlay { display: block; }
 #modal_overlay > .modal.alert-message.warning::after { background: var(--warn); }
 #modal_overlay > .modal.alert-message.error::after, #modal_overlay > .modal.alert-message.danger::after { background: var(--err); }
 #modal_overlay > .modal.alert-message.spinning::before { flex: none; width: 18px; height: 18px; margin: 0; }
+/* LuCI shows each step of the apply countdown through showModal(), which
+   resets the dialog's class to "modal" and lays it out before "spinning"
+   is back: the spinner, a ::before of .spinning, was dropped and started
+   over at 0° every second. The dialog keeps that ::before, empty, with
+   the same animation paused in between, so the spinner turns on. */
+#modal_overlay > .modal:not(.spinning)::before {
+	content: ""; position: absolute; width: 0; height: 0; border: 0;
+	animation: vt-spin .8s linear infinite paused;
+}
 #modal_overlay > .modal.alert-message > * { margin: 0; }
 #modal_overlay > .modal.alert-message .right, #modal_overlay > .modal.alert-message .button-row { margin: 0 0 0 auto; padding: 0; border: 0; background: none; }
 #modal_overlay > .modal.alert-message:has(> .right) { flex-wrap: wrap; }
+/* a warning with a title or buttons ("Connectivity change", "Configuration
+   changes have been rolled back!", "Device unreachable!" on 25.12, whose
+   buttons sit in a .button-row) stacks them, its buttons on the right;
+   side by side the text was a narrow column between title and buttons.
+   The one-line status keeps its spinner beside the text. */
+#modal_overlay > .modal.alert-message:has(> h4, > .button-row) { flex-direction: column; align-items: stretch; }
 
 /* changes dialog */
 .uci-dialog .uci-change-legend {
@@ -1983,7 +2402,7 @@ body.modal-overlay-active #modal_overlay { display: block; }
 .uci-change-legend-label > :is(ins, del, var) {
 	display: inline-flex; flex: none;
 	width: 14px; height: 14px; padding: 0;
-	border: 1px solid; border-radius: 3px;
+	border: 1px solid; border-radius: var(--r-xs);
 	font-size: 0; overflow: hidden;
 	text-decoration: none; font-style: normal;
 }
@@ -2003,7 +2422,7 @@ body.modal-overlay-active #modal_overlay { display: block; }
 .assoclist .td { vertical-align: middle; }
 /* free-standing tables (no section around them) become a card; clip, not
    hidden: a scroll container would capture the sticky header */
-#view > .table, #view > div > .table, .cbi-map > .table, #view > div > div > [data-tab-title]:not(.cbi-section) > .table {
+#view > .table, #view > div:not(.cbi-section) > .table, .cbi-map > .table, #view > div > div > [data-tab-title]:not(.cbi-section) > .table {
 	margin: 0 0 var(--sp-4);
 	background: var(--s1);
 	border: 1px solid var(--line);
@@ -2011,13 +2430,21 @@ body.modal-overlay-active #modal_overlay { display: block; }
 	box-shadow: var(--v-shadow);
 	overflow: clip;
 }
-:is(#view, #view > div, .cbi-map, [data-tab-title]:not(.cbi-section)) > .table .tr > :is(.th, .td):first-child { padding-left: var(--card-px); }
-:is(#view, #view > div, .cbi-map, [data-tab-title]:not(.cbi-section)) > .table .tr > :is(.th, .td):last-child { padding-right: var(--card-px); }
+:is(#view, #view > div:not(.cbi-section), .cbi-map, [data-tab-title]:not(.cbi-section)) > .table .tr > :is(.th, .td):first-child { padding-left: var(--card-px); }
+:is(#view, #view > div:not(.cbi-section), .cbi-map, [data-tab-title]:not(.cbi-section)) > .table .tr > :is(.th, .td):last-child { padding-right: var(--card-px); }
 #view > h3, #view > div > h3 { margin: var(--sp-6) 0 var(--sp-3); font-size: var(--fs-md); }
 /* LuCI 24.10: Status -> Overview's sections are #view's children with the
    heading first (25.12 wraps it in .cbi-title): it keeps the header row's
    bleed, which the rule above would replace */
 #view > .cbi-section > h3:first-child { margin: calc(-1 * var(--card-py)) calc(-1 * var(--card-px)) var(--card-py); }
+/* Table cells supply the spacing below a card header. */
+#view .cbi-section > .cbi-title:has(+ div > .table:first-child),
+#view > .cbi-section > h3:first-child:has(+ div > .table:first-child),
+#view .cbi-section:not(.cbi-tblsection, .cbi-section .cbi-section) > h3:first-child:has(+ .table) { margin-bottom: 0; }
+/* a table section whose table starts with its rows, no column titles
+   (Network -> Wireless): the band read as a taller first row (#122).
+   LuCI 25.12 adds a thead only for titles; 24.10 puts rows in the table */
+#view .cbi-tblsection:not(.cbi-section .cbi-section) > h3:first-child:has(+ .table > :is(tbody, .tbody):first-child, + .table > .tr:first-child:not(.cbi-section-table-titles, .table-titles)) { margin-bottom: 0; }
 #view > h2:not(:first-child), #view > h3:not(:first-child) { margin-top: var(--sp-6); }
 .cbi-section > .table + h3, .cbi-section > .table + .cbi-title, .cbi-section > div + h3 { margin-top: var(--sp-6); }
 .includes { margin-top: var(--sp-4); }
@@ -2128,7 +2555,7 @@ body[data-page^="admin-status-realtime"] #view .table:has(strong[style*="border-
 }
 body[data-page^="admin-status-realtime"] #view .table:has(strong[style*="border-bottom"]) > .tr > .td:nth-child(1) strong::before {
 	content: ""; flex: none;
-	width: 14px; height: 3px; border-radius: 2px;
+	width: 14px; height: 3px; border-radius: var(--r-xs);
 	background: var(--key);
 }
 body[data-page^="admin-status-realtime"] #view .table:has(strong[style*="border-bottom"]) > .tr > .td:is(:nth-child(3), :nth-child(5)) strong {
@@ -2141,7 +2568,7 @@ body[data-page^="admin-status-realtime"] #view .table:has(strong[style*="border-
 	white-space: nowrap;
 }
 body[data-page^="admin-status-realtime"] #view .table:has(strong[style*="border-bottom"]) > .tr > .td:is(:nth-child(2), :nth-child(4), :nth-child(6))::first-line { color: var(--v-text-2); font-size: var(--fs-sm); }
-body[data-page^="admin-status-realtime"] #view .table:has(strong[style*="border-bottom"]) > .tr > .td:nth-child(2)::first-line { color: var(--v-text); font-weight: 650; font-size: var(--fs-md); }
+body[data-page^="admin-status-realtime"] #view .table:has(strong[style*="border-bottom"]) > .tr > .td:nth-child(2)::first-line { color: var(--v-text); font-weight: 600; font-size: var(--fs-md); }
 body[data-page^="admin-status-realtime"] #view .tr:has(:is(#lb_load01_cur, #rx_bw_cur, #rssi_bw_cur, #lb_udp_cur)) { --key: var(--v-chart-1); }
 body[data-page^="admin-status-realtime"] #view .tr:has(:is(#lb_load05_cur, #tx_bw_cur, #rate_bw_cur, #lb_tcp_cur)) { --key: var(--v-chart-2); }
 body[data-page^="admin-status-realtime"] #view .tr:has(:is(#lb_load15_cur, #noise_bw_cur, #lb_otr_cur)) { --key: var(--v-chart-3); }
@@ -2218,7 +2645,7 @@ body[data-page^="admin-status-channel_analysis"] #view [data-tab-title]:not([dat
 	paint-order: stroke;
 	stroke: var(--s1); stroke-width: 3px; stroke-linejoin: round;
 }
-#view div[id="channel_graph"] svg text.v-ca-label[data-v-own] { fill: var(--v-accent) !important; font-weight: 650 !important; }
+#view div[id="channel_graph"] svg text.v-ca-label[data-v-own] { fill: var(--v-accent) !important; font-weight: 600 !important; }
 #view span[data-v-series] { font-size: .75em; vertical-align: 1px; color: var(--v-chart-2) !important; }
 #view span[data-v-series="1"] { color: var(--v-chart-1) !important; }
 #view span[data-v-series="3"] { color: var(--v-chart-3) !important; }
@@ -2230,11 +2657,13 @@ body[data-page^="admin-status-channel_analysis"] #view [data-tab-title]:not([dat
 #view .tr.v-ca-own > .td:nth-child(2) { font-weight: 600; }
 
 @media (max-width: 720px) {
+	/* on a phone: the name, the current value, then average and peak on a
+	   line each, so wide values (332.59 Mibit/s) never run into the labels */
 	body[data-page^="admin-status-realtime"] #view .table:has(strong[style*="border-bottom"]) > .tr {
-		grid-template-columns: minmax(0, 1fr) max-content minmax(0, 1fr) max-content minmax(0, 1fr);
+		grid-template-columns: max-content minmax(0, 1fr);
 		row-gap: 6px; padding: 10px 0;
 	}
-	body[data-page^="admin-status-realtime"] #view .table:has(strong[style*="border-bottom"]) > .tr > .td:nth-child(1) { grid-column: 1 / -1; }
+	body[data-page^="admin-status-realtime"] #view .table:has(strong[style*="border-bottom"]) > .tr > .td:is(:nth-child(1), :nth-child(2)) { grid-column: 1 / -1; }
 	body[data-page^="admin-status-realtime"] #view #settings-row { flex-wrap: wrap; }
 	body[data-page^="admin-status-realtime"] #view #settings-row > * { flex: 1 1 100% !important; }
 	body[data-page^="admin-status-realtime"] #view #settings-row > .right > .btn { margin-left: 0; }
@@ -2246,16 +2675,10 @@ body[data-page^="admin-status-channel_analysis"] #view [data-tab-title]:not([dat
 .vt-login-page {
 	display: flex; align-items: center; justify-content: center;
 	padding: var(--sp-4);
-	background:
-		radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 60%),
-		linear-gradient(var(--line) 1px, transparent 1px) 0 0 / 32px 32px,
-		linear-gradient(90deg, var(--line) 1px, transparent 1px) 0 0 / 32px 32px,
-		var(--bg);
-	background-blend-mode: normal;
 }
 html[data-darkmode="true"] .vt-login-page {
 	background:
-		radial-gradient(900px 520px at 50% 0%, rgba(200, 240, 49, .06), transparent 60%),
+		radial-gradient(900px 520px at 50% 0%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 60%),
 		linear-gradient(rgba(255, 255, 255, .025) 1px, transparent 1px) 0 0 / 32px 32px,
 		linear-gradient(90deg, rgba(255, 255, 255, .025) 1px, transparent 1px) 0 0 / 32px 32px,
 		var(--bg);
@@ -2266,12 +2689,11 @@ html:not([data-darkmode="true"]) .vt-login-page {
 		linear-gradient(90deg, rgba(20, 23, 26, .04) 1px, transparent 1px) 0 0 / 32px 32px,
 		var(--bg);
 }
+/* the backdrop (login.js: packets or starfield), between the grid and the card */
+.vt-login-sky { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .vt-login {
-	width: min(380px, 100%);
+	position: relative; width: min(380px, 100%);
 	z-index: 1;
-}
-.vt-login-page{
-	background:none !important;
 }
 .vt-login-page::before {
 	content: "";
@@ -2283,10 +2705,7 @@ html:not([data-darkmode="true"]) .vt-login-page {
 	opacity: 0.4;
 }
 html:not([data-darkmode="true"]) .vt-login-page::before {
-	opacity: 0.7;
-}
-#packages {
- width: 100% !important;
+	opacity: 0.6;
 }
 .vt-login-card {
 	padding: var(--sp-6);
@@ -2297,20 +2716,8 @@ html:not([data-darkmode="true"]) .vt-login-page::before {
 }
 .vt-login-head { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-6); }
 .vt-login-mark { flex: none; }
-.vt-login-title { margin: 0; font-size: var(--fs-lg); font-family: var(--mono); font-weight: 600; letter-spacing: -.01em; overflow-wrap: anywhere; }
-.vt-login-sub {
-	display: flex; align-items: center; gap: 6px;
-	margin: 2px 0 0;
-	color: var(--text-3);
-	font-size: var(--fs-micro); font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
-}
-.vt-login-sub { isolation: isolate; }
-/* the ring as on the poll pill: behind the dot (the dot itself makes no
-   stacking context, so z-index -1 lands under its background), opacity 0
-   unless animated */
-.vt-login-dot { position: relative; width: 6px; height: 6px; border-radius: 50%; background: var(--accent-text); }
-.vt-login-dot::after { content: ""; position: absolute; z-index: -1; inset: 0; border-radius: 50%; background: var(--accent-line); opacity: 0; animation: vt-live 2s ease-out infinite; }
-.vt-login-error {
+.vt-login-title { margin: 0; font-size: var(--fs-lg); font-weight: 600; letter-spacing: -.01em; overflow-wrap: anywhere; }
+.vt-login-error, .vt-login-info {
 	margin: 0 0 var(--sp-4);
 	padding: var(--sp-2) var(--sp-3);
 	border: 1px solid color-mix(in srgb, var(--err) 45%, transparent);
@@ -2319,7 +2726,14 @@ html:not([data-darkmode="true"]) .vt-login-page::before {
 	border-radius: var(--r);
 	font-size: var(--fs-sm);
 }
+.vt-login-info {
+	border-color: color-mix(in srgb, var(--info) 45%, transparent);
+	border-left-color: var(--info);
+	background: var(--info-soft);
+}
 .vt-login-form { display: flex; flex-direction: column; gap: var(--sp-4); }
+/* a plugin's guidance (sysauth.ut) sits in the form, spaced by its gap */
+.vt-login-form > :is(.vt-login-error, .vt-login-info) { margin: 0; }
 .vt-field { display: flex; flex-direction: column; gap: 6px; }
 .vt-field-label { color: var(--text-3); font-size: var(--fs-micro); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
 .vt-field input {
@@ -2333,9 +2747,17 @@ html:not([data-darkmode="true"]) .vt-login-page::before {
 }
 .vt-field input[name="luci_username"] { font-family: var(--mono); }
 .vt-login-submit { height: var(--ctl-h); margin-top: var(--sp-2); font-size: var(--fs-md) !important; width: 100%; }
-.vt-login-foot { margin: var(--sp-4) 0 0; text-align: center; color: var(--text-3); font: var(--fs-micro)/1.4 var(--mono); letter-spacing: .03em; }
 
 /* ------------------------------------------------ 9. stock page layouts */
+
+/* Statistics -> Graphs: each select and the button that applies it, one
+   control group (they touched, a pixel or two out of line) */
+body[data-page="admin-statistics-graphs"] p.controls > .nowrap {
+	display: inline-flex; align-items: stretch; vertical-align: top;
+	margin: 0 var(--sp-2) var(--sp-2) 0;
+}
+body[data-page="admin-statistics-graphs"] p.controls > .nowrap > select { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+body[data-page="admin-statistics-graphs"] p.controls > .nowrap > .cbi-button { margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; }
 
 /* Network -> Interfaces: device box + stats grid */
 .cbi-section-table .td[data-name="_ifacebox"] { width: 1%; padding-right: var(--sp-5); }
@@ -2372,46 +2794,66 @@ html:not([data-darkmode="true"]) .vt-login-page::before {
 }
 [id$="-ifc-description"] > .nowrap > strong, .td[data-name="_stat"] .nowrap > strong {
 	color: var(--text-3);
-	font: 600 var(--fs-micro)/1.5 var(--font); letter-spacing: .06em; text-transform: uppercase;
+	font: 600 var(--fs-micro)/1.5 var(--font); letter-spacing: .08em; text-transform: uppercase;
 }
 
 /* Network -> Wireless: radios as group headers, networks as rows */
 .td[data-name="_badge"] > .center { text-align: left; }
+/* the space between items is each item's own margin, not a gap: a
+   hidden " | " is still a flex item, and a gap around it indented a line
+   that starts with one (a network's second line, #122) */
 .td[data-name="_stat"] > div, .td[data-name="_stat"] > div > div {
-	display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 20px;
+	display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 0;
 	font-size: 0;                         /* hides the " | " separators */
 }
 .td[data-name="_stat"] > div > br, .td[data-name="_stat"] > div > div > br { display: none; }
-.td[data-name="_stat"] .nowrap { display: inline-flex; align-items: baseline; gap: 6px; font-size: var(--fs-base); }
+.td[data-name="_stat"] .nowrap { display: inline-flex; align-items: baseline; gap: 6px; margin-inline-end: 20px; font-size: var(--fs-base); }
 .td[data-name="_stat"] > div > big { flex-basis: 100%; font-size: var(--fs-md); }
 .td[data-name="_stat"] > div > div { flex-basis: 100%; }
-.td[data-name="_stat"] > div > .nowrap:first-child { flex-basis: 100%; font-size: var(--fs-md); font-weight: 600; }
+.td[data-name="_stat"] > div > .nowrap:first-child { flex-basis: 100%; margin-inline-end: 0; font-size: var(--fs-md); font-weight: 600; }
 .td[data-name="_stat"] > div > .nowrap:first-child > strong { display: none; }
-.cbi-section-table-row:has(> .td[data-name="_stat"] big) > .td { background: var(--s2); border-top: 1px solid var(--line-2); }
-.cbi-section-table-row:has(> .td[data-name="_stat"] big):first-child > .td { border-top: 0; }
+.cbi-section-table-row:has(> .td[data-name="_stat"] big) > .td { background: var(--s2); }
+/* the darker line above a radio is the row above's own bottom border:
+   a top border of its own stacked under it as a double line (#122) */
+.cbi-section-table-row:has(+ .cbi-section-table-row > .td[data-name="_stat"] big) > .td { border-bottom-color: var(--line-2); }
 .cbi-section-table-row:not(:has(big)) > .td[data-name="_badge"] { padding-left: calc(var(--card-px) + 16px); }
 
-/* progress bars: thin track, value text outside the fill */
+/* progress bars (their text only exists in title): a thin track, the
+   value text above it and in flow, so larger browser fonts cannot run
+   into the heading */
 .cbi-progressbar {
-	height: 6px; margin: 20px 0 2px;
-	background: var(--s3);
-	border: 0; border-radius: 3px;
-	overflow: visible;
+	position: relative;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	grid-template-rows: auto 6px;
+	gap: 5px;
+	width: 100%; max-width: 520px;
+	margin: 0 0 2px;
 }
-.cbi-progressbar > div { border-radius: 3px; background: var(--accent-text); }
+.cbi-progressbar > div {
+	grid-area: 2 / 1; z-index: 1;
+	width: 0; height: 6px;
+	border-radius: 3px;
+	background: var(--accent-text);
+	transition: width .3s ease-out;
+}
 .cbi-progressbar::before {
-	inset: auto 0 calc(100% + 5px) 0; padding: 0;
+	content: attr(title);
+	display: block;
 	color: var(--text-2);
 	font: 500 var(--fs-micro)/1.2 var(--mono);
+	white-space: normal; overflow-wrap: anywhere;
 }
+.cbi-progressbar::after { content: ""; grid-area: 2 / 1; height: 6px; border-radius: 3px; background: var(--s3); }
 
 /* fused memory / storage meters (built by menu-vantage.js) */
 .v-src-hidden { display: none !important; }
 .v-meter { display: grid; gap: 10px; padding: 4px 0 6px; }
 .v-meter + .v-meter { margin-top: var(--sp-3); padding-top: var(--sp-4); border-top: 1px solid var(--line); }
 .v-meter-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
-.v-meter-title { color: var(--text); font-weight: 600; }
-.v-meter-big { font: 650 var(--fs-xl)/1 var(--mono); letter-spacing: -.02em; color: var(--text); }
+/* the meter's figures, as the dashboard's: the share in tabular sans, the
+   amounts in monospace */
+.v-meter-big { font: 700 var(--fs-xl)/1 var(--font); font-variant-numeric: tabular-nums; letter-spacing: -.02em; color: var(--text); }
 .v-meter-big small { margin-left: 6px; font: 500 var(--fs-sm) var(--font); letter-spacing: 0; color: var(--text-2); }
 .v-meter-sub { margin-left: auto; color: var(--text-2); font: var(--fs-sm)/1.4 var(--mono); font-variant-numeric: tabular-nums; }
 .v-meter-bar {
@@ -2419,18 +2861,19 @@ html:not([data-darkmode="true"]) .vt-login-page::before {
 	display: flex;
 	height: 12px;
 	background: var(--s3);
-	border-radius: 3px;
+	border-radius: var(--r-xs);
 	overflow: hidden;
 	box-shadow: inset 0 0 0 1px var(--line);
 }
 .v-meter-bar.is-thin { height: 6px; }
 .v-seg { height: 100%; flex: none; transition: width .4s ease-out; }
 .v-seg + .v-seg { box-shadow: inset 1px 0 0 var(--s1); }
-.v-seg-used { background: var(--v-accent); }
+/* blue, as the dashboard's meters: lime there means download */
+.v-seg-used { background: var(--v-meter); }
 .v-seg-cache {
 	background: repeating-linear-gradient(-45deg,
-		color-mix(in srgb, var(--v-accent) 55%, transparent) 0 3px,
-		color-mix(in srgb, var(--v-accent) 25%, transparent) 3px 6px);
+		color-mix(in srgb, var(--v-meter) 55%, transparent) 0 3px,
+		color-mix(in srgb, var(--v-meter) 25%, transparent) 3px 6px);
 }
 .v-seg.is-warn { background: var(--warn); }
 .v-seg.is-crit { background: var(--err); }
@@ -2438,7 +2881,7 @@ html:not([data-darkmode="true"]) .vt-login-page::before {
 .v-meter-legend li { display: inline-flex; align-items: center; gap: 7px; }
 .v-meter-legend b { color: var(--text); font: 600 var(--fs-sm) var(--mono); font-variant-numeric: tabular-nums; }
 .v-meter-legend em { color: var(--text-3); font-style: normal; font-size: var(--fs-micro); }
-.v-key { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.v-key { width: 10px; height: 10px; border-radius: var(--r-xs); flex: none; }
 .v-key.v-seg-free { background: var(--s3); box-shadow: inset 0 0 0 1px var(--line-2); }
 .v-meter-rows { display: grid; grid-template-columns: minmax(120px, max-content) minmax(0, 1fr) max-content; gap: 14px 20px; padding: 4px 0 6px; }
 .v-meter-row { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; grid-template-areas: "label bar val"; align-items: center; }
@@ -2447,15 +2890,26 @@ html:not([data-darkmode="true"]) .vt-login-page::before {
 .v-meter-row > .v-meter-bar { grid-area: bar; }
 .v-meter-row > .v-meter-val { grid-area: val; color: var(--text-2); font: var(--fs-sm) var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .v-meter-row > .v-meter-val b { color: var(--text); font-weight: 600; }
-.v-sr { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-/* wide tables scroll inside their card, never the page. Sticky headers need
-   a non-scrolling ancestor, so status tables only scroll when narrow. */
-.cbi-tblsection, .cbi-section:has(> .cbi-tblsection) { overflow-x: auto; }
+/* Share the widest table's intrinsic width with its headings and dividers. */
+@media (width > 720px) {
+	.cbi-tblsection { display: grid; grid-template-columns: minmax(min-content, 1fr); }
+	.cbi-section.cbi-tblsection > .table { width: auto !important; }
+	.cbi-section:has(.cbi-tblsection) > .cbi-section-node { display: table; width: 100%; }
+	.cbi-value:has(> .table) { display: block; }
+}
+
+/* Table sections can sit below form wrappers; their outer card scrolls too.
+   Other status cards only scroll when narrow so their headers can stick.
+   Vertical overflow is clipped to prevent spurious scrolling on scaled
+   Firefox displays. LuCI 25.12 puts Wireless's station list in a section
+   of its own (cbi-section around the heading and table); its rates and
+   network badges don't wrap, and the table ran past the card. */
+.cbi-tblsection, .cbi-section:has(.cbi-tblsection), .cbi-section:has(> :where(#packages)), .cbi-section:has(> .table.assoclist) { overflow-x: auto; overflow-y: hidden; }
 /* overlay scrollbars show nothing until touched: a shade on the side with
    more table says it scrolls. The covers move with the content and hide
    the shade at either end, so a card that fits looks as before. */
-.vt-main .cbi-tblsection, .vt-main .cbi-section:has(> .cbi-tblsection) {
+.vt-main .cbi-tblsection, .vt-main .cbi-section:has(.cbi-tblsection), .vt-main .cbi-section:has(> :where(#packages)), .vt-main .cbi-section:has(> .table.assoclist) {
 	background-image:
 		linear-gradient(to right, var(--s1) 50%, transparent), linear-gradient(to left, var(--s1) 50%, transparent),
 		linear-gradient(to right, var(--line-2), transparent), linear-gradient(to left, var(--line-2), transparent);
@@ -2477,11 +2931,11 @@ html:not([data-darkmode="true"]) .vt-login-page::before {
 	   section to scroll in: the card itself scrolls, its rows held in one
 	   table box (LuCI puts every row, titles too, in the tbody, so the
 	   columns stay aligned), its header static as in sections */
-	:is(#view, #view > div, .cbi-map, #view > div > div > [data-tab-title]:not(.cbi-section)) > .table:not(:has(> thead)) {
+	:is(#view, #view > div:not(.cbi-section), .cbi-map, #view > div > div > [data-tab-title]:not(.cbi-section)) > .table:not(:has(> thead)) {
 		display: block; overflow-x: auto;
 	}
 	/* and says so with the same shade as the table cards (Processes) */
-	.vt-main :is(#view, #view > div, .cbi-map, #view > div > div > [data-tab-title]:not(.cbi-section)) > .table:not(:has(> thead)) {
+	.vt-main :is(#view, #view > div:not(.cbi-section), .cbi-map, #view > div > div > [data-tab-title]:not(.cbi-section)) > .table:not(:has(> thead)) {
 		background-image:
 			linear-gradient(to right, var(--s1) 50%, transparent), linear-gradient(to left, var(--s1) 50%, transparent),
 			linear-gradient(to right, var(--line-2), transparent), linear-gradient(to left, var(--line-2), transparent);
@@ -2490,15 +2944,15 @@ html:not([data-darkmode="true"]) .vt-login-page::before {
 		background-repeat: no-repeat;
 		background-attachment: local, local, scroll, scroll;
 	}
-	:is(#view, #view > div, .cbi-map, #view > div > div > [data-tab-title]:not(.cbi-section)) > .table:not(:has(> thead)) > tbody { display: table; width: 100%; }
-	:is(#view, #view > div, .cbi-map, #view > div > div > [data-tab-title]:not(.cbi-section)) > .table:has(.cbi-dropdown[open]) { overflow: visible; }
-	:is(#view, #view > div, .cbi-map, #view > div > div > [data-tab-title]:not(.cbi-section)) > .table .tr > .th.th { position: static; }
+	:is(#view, #view > div:not(.cbi-section), .cbi-map, #view > div > div > [data-tab-title]:not(.cbi-section)) > .table:not(:has(> thead)) > tbody { display: table; width: 100%; }
+	:is(#view, #view > div:not(.cbi-section), .cbi-map, #view > div > div > [data-tab-title]:not(.cbi-section)) > .table:has(.cbi-dropdown[open]) { overflow: visible; }
+	:is(#view, #view > div:not(.cbi-section), .cbi-map, #view > div > div > [data-tab-title]:not(.cbi-section)) > .table .tr > .th.th { position: static; }
 }
 
 
 /* a sticky header inside a horizontal scroller would stick relative to that
    scroller (pushed down by --stick-top over the rows): keep those static */
-.cbi-tblsection .table .tr > .th.th, .cbi-section:has(> .cbi-tblsection) .table .tr > .th.th { position: static; }
+.cbi-tblsection .table .tr > .th.th, .cbi-section:has(.cbi-tblsection) .table .tr > .th.th, #packages .tr > .th.th, .cbi-section > .table.assoclist .tr > .th.th { position: static; }
 @media (max-width: 1180px) { .cbi-section .table .tr > .th.th { position: static; } }
 
 /* add-ons: adblock and banIP inject status palettes keyed on the OS
@@ -2545,16 +2999,16 @@ html[data-darkmode="true"] :is(#ban-status, #ban-report) { --ban-ok: #63c79b; --
 }
 .zone-forwards :is(.zone-src, .zone-dest) { display: inline-flex; flex-wrap: wrap; gap: 6px; }
 .zonebadge.zonebadge-empty { background: transparent !important; border-style: dashed; color: var(--text-2) !important; box-shadow: none; }
-/* zone and default policies: reject and drop in red, accept in green */
-select[id^="widget.cbid.firewall."]:has(> option:checked:is([value="REJECT"], [value="DROP"])) { color: var(--err); font-weight: 600; }
-select[id^="widget.cbid.firewall."]:has(> option:checked[value="ACCEPT"]) { color: var(--ok-text); font-weight: 600; }
-select[id^="widget.cbid.firewall."] > option { color: var(--text); font-weight: 400; }
-/* except where accept is the risk: the masquerading (internet-facing)
-   zone accepting input, or forwarding into another zone. Green says
-   "passes", not "safe"; these two get the warning colour instead. */
+/* zone and default policies stay plain: reject and drop are the safe
+   values, accept between your own zones is normal (as on the Overview
+   tab). The one policy that is a risk is coloured: the masquerading
+   (internet-facing) zone accepting input, in the error colours the
+   Overview tab gives it. Forwarding from it into another zone is
+   outlined in the warning colour. */
 #cbi-firewall-zone .tr:has(input[data-widget-id$=".masq"]:checked) > .td[data-name="input"] select:has(> option:checked[value="ACCEPT"]) {
-	color: var(--warn-text); border-color: var(--warn); background-color: var(--warn-soft);
+	color: var(--err-text); border-color: var(--err); background-color: var(--err-soft); font-weight: 600;
 }
+#cbi-firewall-zone .tr:has(input[data-widget-id$=".masq"]:checked) > .td[data-name="input"] select:has(> option:checked[value="ACCEPT"]) > option { color: var(--text); font-weight: 400; }
 #cbi-firewall-zone .tr:has(input[data-widget-id$=".masq"]:checked) .zone-dest > .zonebadge:not(.zonebadge-empty) {
 	outline: 2px solid var(--warn); outline-offset: 1px;
 }
@@ -2752,7 +3206,7 @@ select[id^="widget.cbid.firewall."] > option { color: var(--text); font-weight: 
 .v-nft-what-name[data-muted="true"] { color: var(--text-3); font-weight: 500; }
 /* the chain's end: one quiet line */
 .v-nft-step-end { padding: 4px 0 2px; }
-.v-nft-step-end .v-nft-n { width: 10px; height: 10px; margin: 4px 5px; border-radius: 3px; background: var(--line-2); }
+.v-nft-step-end .v-nft-n { width: 10px; height: 10px; margin: 4px 5px; border-radius: var(--r-xs); background: var(--line-2); }
 .v-nft-step-end .v-nft-what { color: var(--text-3); font-size: var(--fs-sm); }
 .v-nft-step-end .v-nft-verdict { min-height: 20px; padding: 0 8px; font-size: var(--fs-micro); }
 .v-nft-step-more { grid-template-columns: 20px auto; }
@@ -2817,6 +3271,8 @@ select[id^="widget.cbid.firewall."] > option { color: var(--text); font-weight: 
 
 /* Network -> Diagnostics: the three tools in equal columns, top aligned */
 .table:has(.diag-action) { table-layout: fixed; }
+/* LuCI measures the scroll parent before opening a diagnostic menu. */
+#view .cbi-map > .table:has(.diag-action .cbi-dropdown) { overflow: visible; }
 .table:has(.diag-action) .tr > .td { width: calc(100% / 3); vertical-align: top; }
 .table:has(.diag-action) .td > input { max-width: none; }   /* fields fill them: even gaps */
 
@@ -2856,27 +3312,53 @@ select[id^="widget.cbid.firewall."] > option { color: var(--text); font-weight: 
 }
 [id^="cbi-firewall-"] .table:has(.cbi-section-table-titles.named[data-title]) .cbi-section-table-row[data-title]:has(input[data-widget-id$=".enabled"]:not(:checked))::before { color: var(--text-3); }
 
+/* File Manager (luci-app-filemanager) injects a light palette of its own: a
+   #f9f9f9 status bar, #f0f0f0 row hover and editor gutter, #ccc rules. On the
+   dark scheme that is a white band under the theme's light ink; repaint those
+   surfaces with the theme's, and let the table's own hover show through the
+   app's !important row fill. */
+body[data-page="admin-system-filemanager"] #status-bar { background: var(--s1); border-color: var(--line); }
+body[data-page="admin-system-filemanager"] #status-bar .cbi-progressbar { background: none; }
+body[data-page="admin-system-filemanager"] :is(#file-list-container, #content-help) { border-color: var(--line); }
+body[data-page="admin-system-filemanager"] #file-table :is(th, td) { border-right-color: var(--line); }
+body[data-page="admin-system-filemanager"] #file-table tr:hover { background: none !important; }
+body[data-page="admin-system-filemanager"] .line-numbers { background: var(--s3); border-right-color: var(--line); }
+body[data-page="admin-system-filemanager"] .sort-button { border-color: var(--line-2); }
+
 /* ----------------------------------------------------- responsive */
 
 @media (max-width: 1100px) {
 	.vt-search { width: 36px; padding: 0; justify-content: center; }
 	.vt-search-label, .vt-search .vt-kbd { display: none; }
 	.vt-host { max-width: 180px; }
+	/* the name next to the logo crowded the host chip, which says it too */
+	.vt-top-name, .vt-top-name + .vt-crumbs::before { display: none !important; }
 }
 
 @media (max-width: 900px) {
 	.vt-host { display: none !important; }
-	/* indicators go compact (dot, count) before the crumbs get cut; the
-	   label stays as text for screen readers and as the title */
+	.vt-top-name, .vt-top-name + .vt-crumbs::before { display: none !important; }
+	/* indicators go compact (a sign, a count) before the crumbs get cut;
+	   the label stays as text for screen readers and as the title */
 	#indicators > span[data-indicator] { height: 28px; padding: 0 8px; }
 	#indicators > span[data-indicator="poll-status"] { font-size: 0; gap: 0; width: 28px; justify-content: center; padding: 0; }
 	#indicators > span[data-indicator="poll-status"][data-style="active"]::after { left: calc(50% - 3.5px); }
+	/* without its label the pill is the pause / resume button: a pause
+	   sign while it refreshes, a play sign while paused */
+	#indicators > span[data-indicator="poll-status"][data-style="active"]::before {
+		width: 8px; height: 10px; border-radius: 0;
+		background: none; border-inline: 3px solid currentColor;
+	}
+	#indicators > span[data-indicator="poll-status"][data-style="inactive"]::before {
+		width: 0; height: 0; margin-left: 2px; border-radius: 0;
+		background: none; border-left: 9px solid currentColor; border-block: 5px solid transparent;
+	}
 	#indicators > span[data-indicator][data-count] { padding: 0 3px; gap: 0; }
 	#indicators > span[data-indicator][data-count]::before { content: none; }
 	html[data-rail="pinned"] .vt-rail { width: var(--rail-w); }
 	html[data-rail="pinned"] .vt-frame { margin-left: var(--rail-w); }
 	html[data-rail="pinned"] body.vt-auth .vt-shell::before { width: var(--rail-w); }
-	html[data-rail="pinned"] .vt-brand-word, html[data-rail="pinned"] .vt-rail-label,
+	html[data-rail="pinned"] .vt-rail-label,
 	html[data-rail="pinned"] .vt-rail-caret, html[data-rail="pinned"] .vt-rail-sub { display: none !important; }
 	.vt-rail-pin { display: none; }
 }
@@ -2897,10 +3379,14 @@ select[id^="widget.cbid.firewall."] > option { color: var(--text); font-weight: 
 	}
 	.vt-rail > .vt-brand, .vt-rail-foot { display: none; }
 	body.vt-auth .vt-shell::before { display: none; }
+	/* a swipe past either end must not swipe the page. The hairline
+	   scrollbar stays: in a narrow desktop window it is the mouse's way to
+	   the entries past the edge */
 	.vt-rail-list {
 		flex-direction: row; justify-content: flex-start;
 		gap: 0; padding: 0 var(--sp-1);
 		overflow-x: auto; overflow-y: hidden;
+		overscroll-behavior-x: contain;
 	}
 	/* the buttons stay a centred group on wider screens. Centred with auto
 	   margins, not justify-content: center, which would push an overflowing
@@ -2939,7 +3425,6 @@ select[id^="widget.cbid.firewall."] > option { color: var(--text); font-weight: 
 	}
 	.vt-fly-link { min-height: 44px; font-size: var(--fs-md); }
 	.vt-fly-sub a { padding: 8px 12px; font-size: var(--fs-base); }
-	.vt-fly-foot { display: none; }
 	@keyframes vt-sheet-in { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }
 
 	.vt-topbar { gap: var(--sp-2); padding: 0 var(--sp-3) 0 var(--sp-4); }
@@ -2968,7 +3453,7 @@ select[id^="widget.cbid.firewall."] > option { color: var(--text); font-weight: 
 		white-space: normal; text-align: center; line-height: 1.15;
 	}
 	.cbi-section { overflow-x: visible; }
-	.cbi-tblsection, .cbi-section:has(> .cbi-tblsection) { overflow-x: visible; }
+	.cbi-tblsection, .cbi-section:has(.cbi-tblsection), .cbi-section:has(> :where(#packages)), .cbi-section:has(> .table.assoclist) { overflow: visible; }
 	.network-status-table .ifacebox-head, .network-status-table .ifacebox-body { padding-left: 12px; padding-right: 12px; }
 	:is(.ifacebox-body, .ifacebadge) > span:has(> .nowrap) { column-gap: 10px; }
 	.v-meter-sub { margin-left: 0; flex-basis: 100%; }
@@ -3040,6 +3525,7 @@ select[id^="widget.cbid.firewall."] > option { color: var(--text); font-weight: 
 	:is(.vt-main, .modal) .table .tr > .td[data-title]:not(:only-child) { flex-basis: 50%; }
 	:is(.vt-main, .modal) .table .tr > .td[data-title]:last-child:nth-child(odd) { flex-basis: 100%; }
 	:is(.vt-main, .modal) .table .tr > .td.cbi-section-actions { flex-basis: 100%; text-align: left !important; }
+	:is(.vt-main, .modal) .table .tr > .td:not(.cbi-value-field) { white-space: normal; overflow-wrap: anywhere; }
 	/* a named grid section's name cell heads its card */
 	:is(.vt-main, .modal) .table .tr > .td.cbi-section-table-titles { flex-basis: 100%; color: var(--text); font-weight: 600; }
 	:is(.vt-main, .modal) .table .tr > .td:is([data-name="_ifacebox"], [data-name="_ifacestat"]) { flex-basis: 100%; }
@@ -3110,6 +3596,11 @@ select[id^="widget.cbid.firewall."] > option { color: var(--text); font-weight: 
 	.vt-pal-overlay { padding: var(--sp-3); align-items: flex-start; }
 	.vt-pal { max-height: 80vh; }
 	.vt-pal-foot > span:not(.vt-pal-count) { display: none; }
+	/* a client, radio or network from the dashboard: its second text
+	   (address, network, access point) under its name, whole */
+	.vt-pal-two { flex-wrap: wrap; row-gap: 0; }
+	.vt-pal-two .vt-pal-title { flex-basis: 0; }
+	.vt-pal-two .vt-pal-path { order: 1; flex: 0 0 100%; max-width: none; white-space: normal; overflow-wrap: anywhere; }
 }
 
 /* touch, at any width: 16px text in fields (iOS zooms below that),
@@ -3124,7 +3615,7 @@ select[id^="widget.cbid.firewall."] > option { color: var(--text); font-weight: 
 	/* short row buttons (Processes' Kill) at least as wide as they are high */
 	.td.cbi-section-actions :is(.btn, .cbi-button):not(.drag-handle) { min-width: var(--ctl-h); }
 	/* dropdown choices (Save & Apply's too) are touch targets */
-	.cbi-dropdown[open] > ul.dropdown > li { min-height: var(--ctl-h); }
+	.cbi-dropdown[open] > ul.dropdown > li, .vt-actmenu-item { min-height: var(--ctl-h); }
 	.cbi-value { padding: 8px 0; }
 }
 
@@ -3141,7 +3632,18 @@ select[id^="widget.cbid.firewall."] > option { color: var(--text); font-weight: 
 	.v-meter-row { grid-template-areas: "label" "bar" "val"; row-gap: 6px; }
 	.v-meter-row > .v-meter-val { text-align: left; white-space: normal; }
 	.v-meter-row > .v-meter-label small { display: inline; margin-left: 6px; }
+	/* Software: "Actions" is one group of three buttons; it ran past the
+	   card and widened the page. Groups of buttons only wrap here. */
+	:is(#view > .controls, #view > .cbi-section > .controls) > div > .control-group:not(:has(> input, > select, > .cbi-dropdown)) { flex-wrap: wrap; gap: var(--sp-2); }
+	:is(#view > .controls, #view > .cbi-section > .controls) > div > .control-group:not(:has(> input, > select, > .cbi-dropdown)) > * { flex: 1 1 auto; margin-left: 0 !important; border-radius: var(--r-sm) !important; }
+	/* a package's dependency tree: less indent per level */
+	#modal_overlay ul.deps { padding-left: var(--sp-2); }
 }
+/* Software, a package's details: a dependency line (name, size, status)
+   doesn't wrap in LuCI's own stylesheet; a few levels deep it ran past the
+   dialog and left the ↳ alone on its line */
+#modal_overlay ul.deps li > span { white-space: normal; overflow-wrap: anywhere; }
+#modal_overlay ul.deps li > span > .label { white-space: nowrap; }
 
 @media (prefers-reduced-motion: reduce) {
 	*, *::before, *::after {
@@ -3149,10 +3651,10 @@ select[id^="widget.cbid.firewall."] > option { color: var(--text); font-weight: 
 		animation-iteration-count: 1 !important;
 		scroll-behavior: auto !important;
 	}
-	.spinning::before { animation-duration: 1.6s !important; animation-iteration-count: infinite !important; }
+	.spinning::before, #modal_overlay > .modal::before { animation-duration: 1.6s !important; animation-iteration-count: infinite !important; }
 	.alert-message { transition-duration: .01s; }
 	/* ui.Dropdown moves focus on transitionend: keep a (near-instant) transition */
-	.cbi-dropdown[open] > ul.dropdown { transition-duration: .01s; }
+	.cbi-dropdown[open] > ul.dropdown { transition-duration: .001s; }
 	.cbi-progressbar > div { transition: none; }
 	.vt-crumb-switch > svg, .vt-rail-caret, .vt-rail-pin svg { transition: none; }
 	.v-nft-card > summary::before, .v-nft-jump::after { transition: none; }

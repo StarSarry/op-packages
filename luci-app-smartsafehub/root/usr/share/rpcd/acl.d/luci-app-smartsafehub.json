@@ -7,15 +7,20 @@
           "system_root_password_status",
           "status",
           "connected_devices",
+          "smarthome_featured_sensor",
           "wifi_summary",
           "updates_status",
           "firmware_status",
+          "apps_catalog",
+          "apps_status",
+          "apps_metrics",
           "system_time_settings",
           "system_scheduled_reboot_settings",
           "health_status",
           "device_registration_status",
           "device_recommended_rules_status",
-          "activity_history"
+          "activity_history",
+          "netwatch_status"
         ],
         "safeshield": [
           "status",
@@ -30,6 +35,13 @@
         ],
         "smartsafehub_guest": [
           "wifi_guest_summary"
+        ],
+        "jarbis": [
+          "status",
+          "devices_list",
+          "light_state",
+          "sensor_state",
+          "discovery_list"
         ]
       },
       "cgi-io": [
@@ -41,6 +53,7 @@
         "smartsafehub": [
           "system_root_password_set",
           "system_root_password_change",
+          "smarthome_featured_sensor_set",
           "wifi_update",
           "wifi_qr",
           "system_timezone_initialize",
@@ -50,6 +63,10 @@
           "system_reboot",
           "updates_check",
           "updates_install",
+          "apps_install",
+          "apps_repair",
+          "apps_update",
+          "apps_remove",
           "updates_settings_update",
           "firmware_check",
           "firmware_prepare",
@@ -60,6 +77,7 @@
           "system_backup_restore",
           "system_backup_discard",
           "activity_cloud_sync_update",
+          "netwatch_enabled_update",
           "health_run",
           "health_reporter_update",
           "device_registration_refresh",
@@ -89,6 +107,17 @@
         "smartsafehub_guest": [
           "wifi_guest_qr",
           "wifi_guest_update"
+        ],
+        "jarbis": [
+          "settings_update",
+          "device_add",
+          "device_update",
+          "device_room_set",
+          "device_remove",
+          "device_pair",
+          "light_set",
+          "discovery_scan",
+          "broker_credentials"
         ]
       },
       "cgi-io": [

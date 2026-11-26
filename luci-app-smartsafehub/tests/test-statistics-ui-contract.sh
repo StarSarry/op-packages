@@ -22,8 +22,8 @@ jq -e \
   '.["luci-app-smartsafehub"].read.ubus.safeshield | index("statistics") != null' \
   "$ACL" >/dev/null || fail 'statistics must be allowed by the SafeShield read ACL'
 
-grep -Fq 'LUCI_EXTRA_DEPENDS:=safeshield (>=0.3.25)' "$MAKEFILE" || \
-  fail 'SmartSafeHub must require safeshield 0.3.25 or later'
+grep -Fq 'LUCI_EXTRA_DEPENDS:=safeshield (>=0.3.28)' "$MAKEFILE" || \
+  fail 'SmartSafeHub must require safeshield 0.3.28 or later'
 grep -Fq "callSafeShield<RawSafeShieldStatistics>('statistics')" "$API" || \
   fail 'frontend API must call the safeshield statistics RPC'
 grep -Fq 'const STATISTICS_REFRESH_INTERVAL_MS = 60_000;' "$HOOK" || \
@@ -86,8 +86,8 @@ grep -Fq '              이전' "$DEVICE_LIST" || \
   fail 'device statistics pagination must provide a previous-page control'
 grep -Fq '              다음' "$DEVICE_LIST" || \
   fail 'device statistics pagination must provide a next-page control'
-jq -e '.dependencies["chart.js"] == "4.5.1"' "$PACKAGE_JSON" >/dev/null || \
-  fail 'frontend must pin Chart.js 4.5.1'
+jq -e '.dependencies["chart.js"] == "4.6.1"' "$PACKAGE_JSON" >/dev/null || \
+  fail 'frontend must pin Chart.js 4.6.1'
 grep -Fq "from 'chart.js';" "$CHART" || \
   fail 'statistics chart must import Chart.js modules directly'
 grep -Fq 'BarController' "$CHART" || fail 'statistics chart must register BarController'

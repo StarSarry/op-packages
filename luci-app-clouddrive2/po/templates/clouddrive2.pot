@@ -1,0 +1,172 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "NAS"
+msgstr ""
+
+msgid "CloudDrive2"
+msgstr ""
+
+msgid "Settings"
+msgstr ""
+
+msgid "Log"
+msgstr ""
+
+msgid "Grant UCI, service, and helper access for luci-app-clouddrive2"
+msgstr ""
+
+msgid "Path cannot be empty"
+msgstr ""
+
+msgid "Please enter an absolute path starting with /"
+msgstr ""
+
+msgid "PID: %d"
+msgstr ""
+
+msgid "Memory: %s MB"
+msgstr ""
+
+msgid "Active Mounts: %d"
+msgstr ""
+
+msgid "Service action failed: %s"
+msgstr ""
+
+msgid "Failed to execute service command: %s"
+msgstr ""
+
+msgid "Open Web Interface"
+msgstr ""
+
+msgid "Restart"
+msgstr ""
+
+msgid "Stop"
+msgstr ""
+
+msgid "Start"
+msgstr ""
+
+msgid "RUNNING"
+msgstr ""
+
+msgid "NOT RUNNING"
+msgstr ""
+
+msgid "Web Console"
+msgstr ""
+
+msgid "Mounted Paths"
+msgstr ""
+
+msgid "Core binary /usr/share/clouddrive2/clouddrive was not found."
+msgstr ""
+
+msgid "Warning: /dev/fuse device was not detected. Install kmod-fuse for local cloud mounting."
+msgstr ""
+
+msgid "CloudDrive2 is a multi-cloud storage management tool supporting local FUSE mounting, cross-cloud backup, and WebDAV service."
+msgstr ""
+
+msgid "Enable"
+msgstr ""
+
+msgid "Port"
+msgstr ""
+
+msgid "Default HTTP port for Web UI and WebDAV is 19798."
+msgstr ""
+
+msgid "Open Firewall Port"
+msgstr ""
+
+msgid "Allow external WAN access to the CloudDrive2 port."
+msgstr ""
+
+msgid "Configuration Directory"
+msgstr ""
+
+msgid "Stores configuration, account database, directory cache, and logs (CLOUDDRIVE_HOME)."
+msgstr ""
+
+msgid "Mount Point"
+msgstr ""
+
+msgid "Local base directory for FUSE cloud mounts."
+msgstr ""
+
+msgid "Cache Directory"
+msgstr ""
+
+msgid "Temporary staging directory for uploads and downloads. Use /tmp or an external disk to reduce flash wear."
+msgstr ""
+
+msgid "Log File: %s (%s)"
+msgstr ""
+
+msgid "No application log file found in %s, showing syslog output"
+msgstr ""
+
+msgid "Source: OpenWrt logread (clouddrive)"
+msgstr ""
+
+msgid "No log entries found."
+msgstr ""
+
+msgid "Application Log"
+msgstr ""
+
+msgid "System Log (syslog)"
+msgstr ""
+
+msgid "All Levels"
+msgstr ""
+
+msgid "100 Lines"
+msgstr ""
+
+msgid "200 Lines"
+msgstr ""
+
+msgid "500 Lines"
+msgstr ""
+
+msgid "1000 Lines"
+msgstr ""
+
+msgid "Filter by keyword..."
+msgstr ""
+
+msgid "Refresh"
+msgstr ""
+
+msgid "Download Log"
+msgstr ""
+
+msgid "Are you sure you want to clear CloudDrive2 application log files?"
+msgstr ""
+
+msgid "Application log files have been cleared."
+msgstr ""
+
+msgid "Failed to clear logs: %s"
+msgstr ""
+
+msgid "Clear Log"
+msgstr ""
+
+msgid "CloudDrive2 Logs"
+msgstr ""
+
+msgid "View real-time CloudDrive2 application logs and OpenWrt procd system logs."
+msgstr ""
+
+msgid "Newest First"
+msgstr ""
+
+msgid "Auto Refresh"
+msgstr ""

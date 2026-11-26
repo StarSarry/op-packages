@@ -77,17 +77,51 @@ function parseNetdev(raw) {
 	return stats;
 }
 
+// The backend resolves the tracked device (Settings choice or default-route
+// device). Without one, fall back to the busiest non-loopback interface
+// rather than guessing names.
 function getBestWAN(stats, preferred) {
 	for (const i of preferred) if (stats[i]) return i;
 
-	const dynamic = Object.keys(stats).find(i =>
-		/^(wwan|usb|ppp|lte|qmi|modem)/.test(i) && i.includes('_'));
-	if (dynamic) return dynamic;
+	let best = '', bestBytes = -1;
+	for (const k of Object.keys(stats)) {
+		if (k === 'lo') continue;
+		const bytes = (parseInt(stats[k].rx) || 0) + (parseInt(stats[k].tx) || 0);
+		if (bytes > bestBytes) { best = k; bestBytes = bytes; }
+	}
+	return best;
+}
 
-	for (const i of ['pppoe-wan','lte0','usb0','wan','eth1','tun0','wg0'])
-		if (stats[i]) return i;
+// Totals for the downloaded/uploaded boxes: this month from vnStat when the
+// vnStat backend is selected, otherwise the since-boot kernel counters.
+function getTotals(data, curr) {
+	const v = data.vnstat_total;
+	if (v && typeof v === 'object')
+		return { rx: parseInt(v.rx) || 0, tx: parseInt(v.tx) || 0 };
+	return curr;
+}
 
-	return Object.keys(stats).find(k => k !== 'lo') || '';
+const STATS_URL = L.url('admin/tools/get_netdev_stats');
+
+// Normalise one backend response into the shape render()/updateContainer() use.
+function toData(r, ip) {
+	return {
+		stats:        (r && r.stats)       || {},
+		ip:           ip,
+		status:       (r && r.status)      || 'Disconnected',
+		uptime:       (r && r.uptime)      || 0,
+		cpu_pct:      (r && r.cpu_pct)     || 0,
+		cpu_temp:     (r && r.cpu_temp)    != null ? r.cpu_temp : null,
+		mem_pct:      (r && r.mem_pct)     || 0,
+		mem_used:     (r && r.mem_used)    || 0,
+		mem_total:    (r && r.mem_total)   || 0,
+		disk_pct:     (r && r.disk_pct)    || 0,
+		disk_used:    (r && r.disk_used)   || 0,
+		disk_total:   (r && r.disk_total)  || 0,
+		preferred:    (r && r.prefer_iface) ? [r.prefer_iface] : [],
+		vnstat_total: (r && r.vnstat_total) || null,
+		phone:        (r && r.phone)       || null
+	};
 }
 
 function formatRate(bps) {
@@ -245,6 +279,82 @@ function createStatusCard(status, ip) {
 	]);
 }
 
+// ─── Phone port card (RJ11 on the AW1000, only sent when fxsd is installed) ──
+const PHONE_SVG =
+	'<svg viewBox="0 0 200 170" xmlns="http://www.w3.org/2000/svg">' +
+	'<g class="shake">' +
+	'<path class="cord" d="M36 66 C 8 92, 14 132, 40 150"/>' +
+	'<path class="body" d="M44 84 Q48 66 72 66 L128 66 Q152 66 156 84 L168 146 Q170 158 156 158 L44 158 Q30 158 32 146 Z"/>' +
+	'<rect class="body" x="46" y="58" width="16" height="10" rx="3"/>' +
+	'<rect class="body" x="138" y="58" width="16" height="10" rx="3"/>' +
+	'<g class="key">' +
+	'<circle cx="82" cy="96" r="5"/><circle cx="100" cy="96" r="5"/><circle cx="118" cy="96" r="5"/>' +
+	'<circle cx="82" cy="112" r="5"/><circle cx="100" cy="112" r="5"/><circle cx="118" cy="112" r="5"/>' +
+	'<circle cx="82" cy="128" r="5"/><circle cx="100" cy="128" r="5"/><circle cx="118" cy="128" r="5"/>' +
+	'<circle cx="82" cy="144" r="5"/><circle cx="100" cy="144" r="5"/><circle cx="118" cy="144" r="5"/>' +
+	'</g>' +
+	'<path class="handset" d="M26 52 Q26 30 50 30 L150 30 Q174 30 174 52 L174 58 Q174 66 164 66 L142 66 Q132 66 132 56 L132 48 L68 48 L68 56 Q68 66 58 66 L36 66 Q26 66 26 58 Z"/>' +
+	'</g>' +
+	'<g class="waves">' +
+	'<path d="M178 18 q12 12 0 26"/><path d="M188 10 q20 20 0 42"/>' +
+	'<path d="M22 18 q-12 12 0 26"/><path d="M12 10 q-20 20 0 42"/>' +
+	'</g></svg>';
+
+const PHONE_OFFHOOK = ['dialtone', 'digits', 'calling', 'talking', 'busy'];
+
+// Kept here rather than in netstat.css: netstat_dark.css pulls that file in with
+// a plain @import, which browsers keep cached across package updates.
+const PHONE_CSS = `
+.netstat-box.is-phone { flex: 0.8 1 0 !important; align-items: center !important; }
+.ns-phone-art { color: var(--ns-status-up) !important; }
+.netstat-box.is-down .ns-phone-art { color: var(--ns-status-down) !important; opacity: 0.7; }
+.ns-phone-art svg { display: block; width: 46px; height: 40px; overflow: visible; margin: 2px auto 4px; }
+.ns-phone-art .body, .ns-phone-art .handset { fill: currentColor; }
+.ns-phone-art .key { fill: var(--ns-bg); }
+.ns-phone-art .cord, .ns-phone-art .waves path { fill: none; stroke: currentColor; stroke-width: 6; stroke-linecap: round; }
+.ns-phone-art .waves path { opacity: 0; }
+.ns-phone-art .handset { transition: transform 0.45s cubic-bezier(.3, 1.4, .5, 1); transform-origin: 100px 52px; }
+.is-offhook .ns-phone-art .handset { transform: translate(-6px, -34px) rotate(-14deg); }
+.is-ringing .ns-phone-art .shake { animation: ns-phone-shake 0.18s infinite; transform-origin: 100px 120px; }
+.is-ringing .ns-phone-art .waves path { animation: ns-phone-wave 1s infinite; }
+.is-ringing .ns-phone-art .waves path:nth-child(2) { animation-delay: 0.2s; }
+@keyframes ns-phone-shake { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-4deg); } 75% { transform: rotate(4deg); } }
+@keyframes ns-phone-wave { 0% { opacity: 0; } 40% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .is-ringing .ns-phone-art .shake { animation: none; }
+  .is-ringing .ns-phone-art .waves path { animation: none; opacity: 1; }
+}
+@media (max-width: 900px) {
+  .netstat-box.is-phone { flex: 1 1 100% !important; order: 6 !important; }
+}
+@media (max-width: 600px) {
+  .netstat-box.is-phone { order: 7 !important; }
+}`;
+
+function updatePhoneCard(card, phone) {
+	const lifted  = phone.on && (phone.offhook || PHONE_OFFHOOK.includes(phone.state));
+	const ringing = phone.on && phone.state === 'ringing';
+	card.className = 'netstat-box is-phone ' + (phone.on ? 'is-up' : 'is-down') +
+		(lifted ? ' is-offhook' : '') + (ringing ? ' is-ringing' : '');
+	patchText(card, '.netstat-center-status', !phone.on ? _('Off') :
+		ringing ? _('Ringing') : phone.state === 'talking' ? _('In call') : _('On'));
+}
+
+function createPhoneCard(phone) {
+	if (!document.getElementById('ns-phone-css'))
+		document.head.appendChild(E('style', { id: 'ns-phone-css' }, PHONE_CSS));
+
+	const art = E('div', { class: 'ns-phone-art' });
+	art.innerHTML = PHONE_SVG;
+	const card = E('div', { class: 'netstat-box is-phone' }, [
+		art,
+		E('div', { class: 'netstat-center-status' }),
+		E('div', { class: 'netstat-label' }, _('phone'))
+	]);
+	updatePhoneCard(card, phone);
+	return card;
+}
+
 // ─── Inline SVG icons ─────────────────────────────────────────────────────────
 function svgIcon(path, color) {
 	const ns = 'http://www.w3.org/2000/svg';
@@ -381,8 +491,9 @@ function updateContainer(container, data, dt) {
 
 	const rxRate  = formatRate(rxSpeed * 8);
 	const txRate  = formatRate(txSpeed * 8);
-	const totalRx = formatBytes(curr.rx).split(' ');
-	const totalTx = formatBytes(curr.tx).split(' ');
+	const sums    = getTotals(data, curr);
+	const totalRx = formatBytes(sums.rx).split(' ');
+	const totalTx = formatBytes(sums.tx).split(' ');
 	const peakRxFmt = formatRate(peakRx * 8);
 	const peakTxFmt = formatRate(peakTx * 8);
 
@@ -422,6 +533,9 @@ function updateContainer(container, data, dt) {
 		patchText(center, '.netstat-center-ip',     data.ip || 'N/A');
 	}
 
+	const phoneCard = container.querySelector('.is-phone');
+	if (phoneCard && data.phone) updatePhoneCard(phoneCard, data.phone);
+
 	// totals
 	const totals = container.querySelectorAll('.is-total');
 	if (totals[0]) {
@@ -457,18 +571,34 @@ function updateContainer(container, data, dt) {
 	return true;
 }
 
-// ─── Cached public IP (refreshed every 60 s, not on every 2 s poll) ──────────
-let _cachedIp        = 'N/A';
+// ─── Cached public IP (refreshed every 5 min, not on every 2 s poll) ─────────
+// The public IP (as seen through any proxy such as Passwall) is shown once
+// known; the tracked device's local address is only a fallback until then,
+// so the 2 s fast polls must never overwrite it.
+let _publicIp        = null;
+let _localIp         = 'N/A';
 let _lastIpFetch     = 0;
 const IP_REFRESH_MS  = 300000;
+const IP_RETRY_MS    = 30000;
+
+function shownIp() {
+	return _publicIp || _localIp;
+}
+
+function noteLocalIp(r) {
+	if (r && r.ip && r.ip !== 'N/A') _localIp = r.ip;
+}
 
 function maybeRefreshIp() {
 	const now = Date.now();
-	if (now - _lastIpFetch < IP_REFRESH_MS) return;
+	if (now - _lastIpFetch < (_publicIp ? IP_REFRESH_MS : IP_RETRY_MS)) return;
 	_lastIpFetch = now;
 	// Full fetch (no ?fast=1) to get public IP; update cache on success
-	fetchWithTimeout('/cgi-bin/luci/admin/tools/get_netdev_stats', 8000)
-		.then(r => { if (r && r.ip && r.ip !== 'N/A') _cachedIp = r.ip; })
+	fetchWithTimeout(STATS_URL, 8000)
+		.then(r => {
+			if (r && r.ip_source === 'public' && r.ip && r.ip !== 'N/A')
+				_publicIp = r.ip;
+		})
 		.catch(() => {});
 }
 
@@ -478,29 +608,13 @@ return baseclass.extend({
 
 	load() {
 		// Use ?fast=1 to skip slow public-IP APIs — response is near-instant
-		return fetchWithTimeout('/cgi-bin/luci/admin/tools/get_netdev_stats?fast=1', 5000)
+		return fetchWithTimeout(STATS_URL + '?fast=1', 5000)
 			.then(r => {
-				// Seed the cached IP from the local WAN address on first load
-				if (r && r.ip && r.ip !== 'N/A') _cachedIp = r.ip;
-				return {
-					stats:      (r && r.stats)       || {},
-					ip:         _cachedIp,
-					status:     (r && r.status)      || 'Disconnected',
-					uptime:     (r && r.uptime)      || 0,
-					cpu_pct:    (r && r.cpu_pct)     || 0,
-					cpu_temp:   (r && r.cpu_temp)    != null ? r.cpu_temp : null,
-					mem_pct:    (r && r.mem_pct)     || 0,
-					mem_used:   (r && r.mem_used)    || 0,
-					mem_total:  (r && r.mem_total)   || 0,
-					disk_pct:   (r && r.disk_pct)    || 0,
-					disk_used:  (r && r.disk_used)   || 0,
-					disk_total: (r && r.disk_total)  || 0,
-					preferred:  (r && r.prefer_iface) ? [r.prefer_iface] : []
-				};
+				// Show the local WAN address until the public IP arrives
+				noteLocalIp(r);
+				return toData(r, shownIp());
 			})
-			.catch(() => ({ stats: {}, ip: 'N/A', status: 'Disconnected',
-			                uptime: 0, cpu_pct: 0, cpu_temp: null, mem_pct: 0, mem_used: 0, mem_total: 0,
-			                disk_pct: 0, disk_used: 0, disk_total: 0, preferred: [] }));
+			.catch(() => toData(null, 'N/A'));
 	},
 
 	render(data) {
@@ -538,8 +652,9 @@ return baseclass.extend({
 
 		const rxRate  = formatRate(rxSpeed * 8);
 		const txRate  = formatRate(txSpeed * 8);
-		const totalRx = formatBytes(curr.rx).split(' ');
-		const totalTx = formatBytes(curr.tx).split(' ');
+		const sums    = getTotals(data, curr);
+		const totalRx = formatBytes(sums.rx).split(' ');
+		const totalTx = formatBytes(sums.tx).split(' ');
 
 		// Build download box manually to inject trend badge
 		const dlBox = createRateBox(_('download'), rxRate.number, rxRate.unit,
@@ -559,11 +674,12 @@ return baseclass.extend({
 			createTempCard(data.cpu_temp != null ? data.cpu_temp : null,
 				formatUptime(data.uptime || 0)),
 			createStatusCard(data.status || 'Disconnected', data.ip),
+			data.phone ? createPhoneCard(data.phone) : null,
 			createInfoCard(data.mem_pct || 0, data.mem_used || 0, data.mem_total || 0,
 				data.disk_pct || 0, data.disk_used || 0, data.disk_total || 0),
 			createStatBox(_('downloaded'), totalRx[0], totalRx[1], 'is-total is-downloaded'),
 			createStatBox(_('uploaded'),   totalTx[0], totalTx[1], 'is-total is-uploaded'),
-		]);
+		].filter(Boolean));
 
 		const container = E('div', { class: 'stats-grid netstat-wrap' }, row);
 		_container = container;
@@ -573,31 +689,17 @@ return baseclass.extend({
 			L.Poll.add(() => {
 				// Periodically refresh the public IP in the background (non-blocking)
 				maybeRefreshIp();
-				return fetchWithTimeout('/cgi-bin/luci/admin/tools/get_netdev_stats?fast=1', 5000)
+				return fetchWithTimeout(STATS_URL + '?fast=1', 5000)
 					.then(r => {
 						const now2 = Date.now();
 						const dt2  = Math.max(0.1, (now2 - last_time) / 1000);
 						last_time  = now2;
 
-						// Update cached IP from local WAN if we got a valid one
-						if (r && r.ip && r.ip !== 'N/A') _cachedIp = r.ip;
+						// Keep the local address current as a fallback only
+						noteLocalIp(r);
 
 						if (_container && _container.isConnected) {
-							updateContainer(_container, {
-								stats:      (r && r.stats)       || {},
-								ip:         _cachedIp,
-								status:     (r && r.status)      || 'Disconnected',
-								uptime:     (r && r.uptime)      || 0,
-								cpu_pct:    (r && r.cpu_pct)     || 0,
-								cpu_temp:   (r && r.cpu_temp)    != null ? r.cpu_temp : null,
-								mem_pct:    (r && r.mem_pct)     || 0,
-								mem_used:   (r && r.mem_used)    || 0,
-								mem_total:  (r && r.mem_total)   || 0,
-								disk_pct:   (r && r.disk_pct)    || 0,
-								disk_used:  (r && r.disk_used)   || 0,
-								disk_total: (r && r.disk_total)  || 0,
-								preferred:  (r && r.prefer_iface) ? [r.prefer_iface] : []
-							}, dt2);
+							updateContainer(_container, toData(r, shownIp()), dt2);
 						}
 					})
 					.catch(() => {});

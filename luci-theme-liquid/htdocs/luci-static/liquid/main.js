@@ -1518,8 +1518,15 @@
 			var badge = document.querySelector('p.luci-foot a.liquid-version-link');
 			var footer = badge ? badge.closest('p.luci') : null;
 			var card = inCard ? document.querySelector('p.luci-foot .liquid-ver-toast.is-update') : null;
-			var parent = card || footer;
-			if (!parent) return null;
+			/* r22：非卡片内提示 → 挂 body（fixed 根层），不再挂页脚。原因：
+			   页脚带 backdrop-filter，卡片(子元素)伸出其盒子时 iOS WebKit 的
+			   合成会把后面同为 backdrop-filter 的玻璃卡片绘制层压在伸出部分之上
+			   ——布局/命中测试说它在上、绘制却在下（实测 hit=benka、z>30=none、
+			   锚点正确，但肉眼被盖；所有页面都发生、固定高度处出现剪裁边界，
+			   正是某层玻璃/页脚固定高度带的边）。根层 fixed + z1500 后绘制顺序
+			   在任何引擎里平凡正确（>内容/ifacebox:hover 1001，<modal 2000）。 */
+			if (!footer && !card) return null;
+			var parent = card || document.body;
 			var ov = document.createElement('div');
 			ov.className = 'liquid-ver-overlay' + (card ? ' card-centered' : '');
 			var toast = document.createElement('div');
@@ -1555,8 +1562,17 @@
 			}
 			ov.appendChild(toast);
 			parent.appendChild(ov);
+			var syncBottom = null;
+			if (!card && footer) {
+				syncBottom = function() {
+					ov.style.bottom = (footer.offsetHeight || 34) + 'px';
+				};
+				syncBottom();
+				setTimeout(syncBottom, 20);
+				window.addEventListener('resize', syncBottom);
+			}
 			setTimeout(function() { ov.classList.add('show'); }, 20);
-			var autoId = null;
+var autoId = null;
 			if (autoMs > 0) {
 				autoId = setTimeout(function() { res.dismiss(); }, autoMs);
 			}
@@ -1564,6 +1580,7 @@
 				ov: ov,
 				dismiss: function() {
 					if (autoId) { clearTimeout(autoId); autoId = null; }
+					if (syncBottom) window.removeEventListener('resize', syncBottom);
 					ov.classList.remove('show');
 					setTimeout(function() { ov.remove(); }, 550);
 				}
@@ -1908,6 +1925,95 @@
 		var w = document.createElement('div');
 		w.innerHTML = '<svg class="liquid-logo" viewBox="0 0 64 68" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs><linearGradient id="liquid-lg-login" x1="0" y1="0" x2="0.3" y2="1"><stop offset="0%" stop-color="rgba(255,255,255,0.55)"/><stop offset="30%" stop-color="rgba(255,255,255,0.20)"/><stop offset="100%" stop-color="var(--primary-color-low)" stop-opacity="0.85"/></linearGradient><linearGradient id="liquid-lg-shine" x1="0.3" y1="0" x2="0.7" y2="0.6"><stop offset="0%" stop-color="white" stop-opacity="0.6"/><stop offset="60%" stop-color="white" stop-opacity="0"/></linearGradient></defs><path d="M32 3 C46 20 57 30 57 42 a25 25 0 0 1 -50 0 C7 30 18 20 32 3 Z" fill="url(#liquid-lg-login)"/><path d="M32 3 C46 20 57 30 57 42 a25 25 0 0 1 -50 0 C7 30 18 20 32 3 Z" fill="url(#liquid-lg-shine)"/><ellipse cx="23" cy="39" rx="9.5" ry="6" fill="#ffffff" opacity="0.35"/></svg>';
 		m.insertBefore(w.firstChild, m.firstChild);
+	}
+
+	/* ===== 登录页：卡片与固定页脚的重叠检测（Duo 外屏/内屏、iOS 工具栏展开等）=====
+	   起因：外屏登录框下半截被页脚压住（连登录按钮都被盖）、内屏轻微覆盖。
+	   为什么不用 UA/分辨率判断设备：iOS 的 EdgiOS UA 只有 OS 版本+浏览器构建号，
+	   读不到机型与屏幕形态；分辨率能区分内外屏但会误伤同尺寸的其它设备。
+	   这里直接量几何——整个 stack（顶部胶囊+卡片）的上下边 vs 视口安全区与
+	   页脚顶线（fixed bottom:4+自身高），重叠才分级处理：
+	     clear=页脚留净空(卡片上移) / fit=整栈 zoom 等比缩小(不滚动、页脚始终
+	   可见、顶部胶囊不裁)。不重叠的平台零变化。监听 resize / orientationchange
+	   / visualViewport 以覆盖 iOS 工具栏展开收起引起的视口变化。 */
+	function syncLoginFooterClearance() {
+		var body = document.body;
+		if (!body || !body.classList.contains('liquid-login'))
+			return;
+		var overlay = document.getElementById('liquid-login');
+		var stack = overlay && overlay.querySelector('.liquid-login-stack');
+		var card = stack && stack.querySelector('.modal.login');
+		var foot = document.querySelector('p.luci');
+		if (!overlay || !stack || !card || !foot)
+			return;
+
+		/* 复位到"零变化"基线 */
+		body.classList.remove('liquid-login-clear');
+		body.classList.remove('liquid-login-fit');
+		stack.style.zoom = '';
+
+		function geom() {
+			var sr = stack.getBoundingClientRect();
+			var fh = foot.offsetHeight || 0;
+			var vh = overlay.clientHeight;
+			return {
+				top: sr.top,
+				bottom: sr.bottom,
+				height: sr.height,
+				footTop: vh - 4 - fh,
+				vh: vh
+			};
+		}
+		function fits() {
+			var g = geom();
+			/* 顶部不被裁(留8px)、底部不进页脚区(留8px气口)、卡片不超高 */
+			return g.top >= 8 && g.bottom <= g.footTop - 8 &&
+				card.getBoundingClientRect().height <= g.vh - 8;
+		}
+
+		if (fits())
+			return;                       /* 不重叠 → 一个 class 都不加（其它平台零变化） */
+
+		/* 级1 clear：给页脚留净空，卡片整体上移一点（解决轻微覆盖） */
+		body.classList.add('liquid-login-clear');
+		if (fits())
+			return;
+
+		/* 级2 fit：整栈等比缩小（zoom）——小屏不滚动、页脚固定可见、
+		   顶部胶囊不被裁（用户要求：缩小登录页所有元素比例）。
+		   注意 flex 是垂直居中：栈底 = (内容高+缩放后高)/2，不能按顶对齐公式
+		   算，改为"保留 clear 净空 + 逐次收敛"——每缩 8% 复测一次直到 fits。 */
+		body.classList.add('liquid-login-clear');   /* fit 期间保留净空，整体上移 */
+		body.classList.add('liquid-login-fit');
+		var scale = 1;
+		stack.style.zoom = scale;
+		for (var i = 0; i < 12 && !fits(); i++) {
+			scale = Math.max(scale * 0.92, 0.4);   /* 0.4 兜底，避免缩到不可读 */
+			stack.style.zoom = scale;
+			if (scale <= 0.401)
+				break;
+		}
+	}
+
+	function scheduleLoginFooterClearance() {
+		if (window.requestAnimationFrame)
+			window.requestAnimationFrame(syncLoginFooterClearance);
+		else
+			syncLoginFooterClearance();
+	}
+
+	scheduleLoginFooterClearance();
+	window.addEventListener('load', scheduleLoginFooterClearance);
+	window.addEventListener('resize', scheduleLoginFooterClearance);
+	window.addEventListener('orientationchange', scheduleLoginFooterClearance);
+	if (window.visualViewport)
+		window.visualViewport.addEventListener('resize', scheduleLoginFooterClearance);
+	setTimeout(scheduleLoginFooterClearance, 300);   /* 字体/布局落定后复核 */
+	if (window.MutationObserver) {
+		/* 输密码报错会让卡片变高 → 重新判定 */
+		new MutationObserver(scheduleLoginFooterClearance)
+			.observe(document.getElementById('liquid-login') || document.body,
+				{ childList: true, subtree: true, characterData: true });
 	}
 
 	/* 窗口尺寸变化时重新计算已打开下拉框的方向 */

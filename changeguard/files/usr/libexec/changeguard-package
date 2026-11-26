@@ -1,0 +1,59 @@
+#!/bin/sh
+set -eu
+[ -n "${IPKG_INSTROOT:-}" ] && exit 0
+bin=/usr/sbin/changeguard_bin
+config=/etc/changeguard/config.json
+phase=${1:-}
+run_checked() {
+ response=$("$bin" "$@" --config "$config") || { printf '%s\n' "$response" >&2; return 1; }
+}
+remember_service() {
+ if /etc/init.d/changeguard enabled; then touch /var/run/changeguard-package-enable; fi
+ if "$bin" status --config "$config" >/dev/null 2>&1; then
+  touch /var/run/changeguard-package-restart
+  /etc/init.d/changeguard stop
+ fi
+}
+resolve_runtime() {
+ local context runtime digest actual
+ [ -f "$config" ] || return 0
+ context=$(jsonfilter -i "$config" -e '@.recoveryConfig' 2>/dev/null) || context=
+ [ -n "$context" ] || context="$config"
+ [ -f "$context" ] || return 1
+ runtime=$(jsonfilter -i "$context" -e '@.recoveryRuntime.path' 2>/dev/null) || runtime=
+ [ -n "$runtime" ] || return 0
+ digest=$(jsonfilter -i "$context" -e '@.recoveryRuntime.sha256' 2>/dev/null) || return 1
+ [ -n "$digest" ] && [ -x "$runtime" ] || return 1
+ actual=$(sha256sum "$runtime") || return 1
+ [ "${actual%% *}" = "$digest" ] || return 1
+ bin="$runtime"
+}
+case "$phase" in
+ runtime-path)
+  resolve_runtime || exit 1
+  printf '%s\n' "$bin"
+ ;;
+ run)
+  shift
+  resolve_runtime || exit 1
+  exec "$bin" "$@"
+ ;;
+ preinst|prerm)
+  if [ -f "$config" ]; then run_checked maintenance-check; fi
+  remember_service
+  if [ -f "$config" ]; then run_checked maintenance-check; fi
+  if [ "$phase" = prerm ]; then /etc/init.d/changeguard disable; fi
+ ;;
+ postinst)
+  fresh=0
+  if [ ! -f "$config" ]; then fresh=1; else run_checked maintenance-check; fi
+  remember_service
+  run_checked initialize
+  run_checked sync-backend
+  run_checked refresh-runtime
+  if [ "$fresh" = 1 ] || [ -f /var/run/changeguard-package-enable ]; then /etc/init.d/changeguard enable; fi
+  if [ "$fresh" = 1 ] || [ -f /var/run/changeguard-package-restart ]; then /etc/init.d/changeguard start; fi
+  rm -f /var/run/changeguard-package-enable /var/run/changeguard-package-restart
+ ;;
+ *) exit 2 ;;
+esac

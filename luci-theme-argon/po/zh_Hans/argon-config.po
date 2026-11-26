@@ -32,6 +32,14 @@ msgstr "十六进制颜色值（默认：#5e72e4）。"
 msgid "Action"
 msgstr "操作"
 
+#: htdocs/luci-static/resources/view/argon-config.js:170
+msgid "Admin page glass effect"
+msgstr "管理页毛玻璃"
+
+#: htdocs/luci-static/resources/view/argon-config.js:166
+msgid "Admin page wallpaper"
+msgstr "管理页壁纸"
+
 #: htdocs/luci-static/resources/argon/branding.js:62
 msgid "Another update is running. Please try again."
 msgstr "有其他更新正在进行，请稍后重试。"
@@ -165,8 +173,8 @@ msgid "Grant UCI access for luci-theme-argon"
 msgstr "授予 luci-theme-argon 访问 UCI 配置的权限"
 
 #: htdocs/luci-static/resources/view/argon-config.js:114
-msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos. Chrome is recommended."
-msgstr "设置 Argon 主题登录页的模糊程度和透明度，管理背景图片与视频。建议使用 Chrome 浏览器。"
+msgid "Here you can set the blur and transparency of the login page of argon theme, and manage the background pictures and videos."
+msgstr "设置 Argon 主题登录页的模糊程度和透明度，管理背景图片与视频。"
 
 #: htdocs/luci-static/resources/argon/branding.js:60
 msgid "Invalid PNG image or dimensions."
@@ -301,6 +309,10 @@ msgstr "展开或收起导航"
 #: htdocs/luci-static/resources/argon-overview.js:33
 msgid "Transmitted bytes"
 msgstr "已发送字节数"
+
+#: htdocs/luci-static/resources/view/argon-config.js:171
+msgid "Turning this off also hides the admin wallpaper and restores the default admin appearance."
+msgstr "关闭此项也会隐藏管理页壁纸，并恢复管理页的默认外观。"
 
 #: htdocs/luci-static/resources/argon/branding.js:110
 msgid "Unable to load custom branding. Reload this page or reinstall the theme."
@@ -538,3 +550,23 @@ msgstr "取消"
 #: htdocs/luci-static/resources/argon/updates.js
 msgid "Try again after %s."
 msgstr "请在 %s 后重试。"
+
+#: ucode/template/themes/argon/login_background.ut
+msgid "Play background video"
+msgstr "播放背景视频"
+
+#: ucode/template/themes/argon/login_background.ut
+msgid "Pause background video"
+msgstr "暂停背景视频"
+
+#: ucode/template/themes/argon/header.ut
+msgid "Skip to content"
+msgstr "跳至主要内容"
+
+#: ucode/template/themes/argon/header.ut:46
+msgid "Close"
+msgstr "关闭"
+
+#: ucode/template/themes/argon/header.ut:43
+msgid "Navigation"
+msgstr "导航"

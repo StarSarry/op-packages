@@ -22,7 +22,8 @@
 var classicPageInstalled = <%= installed and "true" or "false" %>;
 var classicInstallUrl = '<%=url("admin/services/kaiplus/install_kai")%>';
 var classicUpdateUrl = '<%=url("admin/services/kaiplus/update_kai")%>';
-var classicOpenUrl = '<%=url("admin/services/linkease_apps/open")%>?id=kai';
+var classicAuthUrl = '<%=url("admin/services/linkease_auth/auth")%>';
+var classicOpenUrl = '';
 
 function installClassicKai() {
 	classicPackageTask(false);
@@ -48,7 +49,7 @@ function classicPackageTask(update) {
 	(new XHR()).post(update ? classicUpdateUrl : classicInstallUrl, { token: window.taskd.csrfToken || '' }, function(x) {
 		var data = {};
 		button.disabled = false;
-		button.value = update ? '<%:Update%>' : '<%:Install CLASSIC KAI%>';
+		button.value = update ? '<%:Check for updates%>' : '<%:Install CLASSIC KAI%>';
 		if (x && x.responseText) {
 			try { data = JSON.parse(x.responseText || '{}'); }
 			catch (e) { data = {}; }
@@ -83,7 +84,11 @@ XHR.poll(5, '<%=url("admin/services/kaiplus/classic_status")%>', null, function(
 	installButton.style.display = st.installed ? 'none' : '';
 	updateButton.style.display = st.installed ? '' : 'none';
 	updateHint.style.display = st.installed ? '' : 'none';
-	openButton.style.display = st.installed && st.running ? '' : 'none';
+	var port = Number(st.port);
+	classicOpenUrl = port >= 1 && port <= 65535 && port === Math.floor(port)
+		? classicAuthUrl + '?return=' + encodeURIComponent('http://' + window.location.hostname + ':' + port + '/apps/kai/')
+		: '';
+	openButton.style.display = st.installed && st.running && classicOpenUrl ? '' : 'none';
 });
 //]]></script>
 
@@ -94,6 +99,6 @@ XHR.poll(5, '<%=url("admin/services/kaiplus/classic_status")%>', null, function(
 	<div class="classic-kai-actions">
 		<input id="classic-kai-install" class="btn cbi-button cbi-button-apply" type="button" value="<%:Install CLASSIC KAI%>" onclick="installClassicKai()" style="display:none"/>
 		<input id="classic-kai-open" class="btn cbi-button cbi-button-apply" type="button" value="<%:Open CLASSIC KAI%>" onclick="window.open(classicOpenUrl, '_blank', 'noopener')" style="display:none"/>
-		<input id="classic-kai-update" class="btn cbi-button" type="button" value="<%:Update%>" title="<%:Update CLASSIC KAI%>" aria-label="<%:Update CLASSIC KAI%>" onclick="updateClassicKai()" style="display:none"/>
+		<input id="classic-kai-update" class="btn cbi-button" type="button" value="<%:Check for updates%>" title="<%:Check for CLASSIC KAI updates%>" aria-label="<%:Check for CLASSIC KAI updates%>" onclick="updateClassicKai()" style="display:none"/>
 	</div>
 </fieldset>

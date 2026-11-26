@@ -1,18 +1,10 @@
+// SPDX-License-Identifier: Apache-2.0
 'use strict';
 'require view';
 'require rpc';
 'require poll';
 'require ui';
-
-(function() {
-	if (!document.querySelector('link[href*="trafficctl/status.css"]')) {
-		var lnk = document.createElement('link');
-		lnk.rel = 'stylesheet';
-		lnk.type = 'text/css';
-		lnk.href = '/luci-static/resources/view/trafficctl/status.css';
-		document.head.appendChild(lnk);
-	}
-})();
+'require trafficctl.common as common';
 
 var callPortfwList = rpc.declare({
 	object: 'luci.trafficctl',
