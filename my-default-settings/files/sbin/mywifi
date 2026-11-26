@@ -157,7 +157,7 @@ get_base_ssid() {
     [ -n "$CUSTOM_SSID" ] && { echo "$CUSTOM_SSID"; return; }
     local h="$(uci -q get system.@system[0].hostname)"
     case "$h" in
-        ""|ieee80211|"(none)"|OpenWrt) echo "Kwrt" ;;
+        ""|ieee80211|"(none)"|OpenWrt) echo "OpenWrt" ;;
         *) echo "$h" ;;
     esac
 }
